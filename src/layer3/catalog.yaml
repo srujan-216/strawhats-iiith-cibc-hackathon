@@ -1,0 +1,279 @@
+version: "1.0"
+entity: golden_id
+decision_grain: (golden_id, decision_date)
+offline_store: gold.features_offline
+online_store: gold.features_online
+protected_excluded: &protected
+  - gender_code
+  - marital_status
+  - citizenship_status
+  - household_size
+  - dependants_count
+  - newcomer_program_flag
+  - vulnerability_type
+  - accent / voice biometrics
+  - age
+  - age_band
+  - cpp_oas_deposit_flag
+  - ccb_deposit_flag
+  - fsa_income_index
+  - majority_language
+
+features:
+
+  # ---------- behaviour from accounts ---------------------------------------------------------
+  - name: dpd_level
+    type: integer
+    sources: [gold.c360_account (role=primary)]
+    recipe: max(dpd) across the customer's primary accounts on as_of
+    refresh: daily
+    why: single sharpest predictor of near-term cure; policy-neutral
+    nullable: true     # customers with no delinquent account yield 0
+    default_on_null: 0
+    version: 1
+
+  - name: worst_dpd_12m
+    type: integer
+    sources: [silver.card_accounts, silver.loan_accounts]
+    recipe: max(worst_dpd_12m) across primary accounts
+    refresh: daily
+    why: history of serious delinquency often matters more than current state
+    nullable: true
+    default_on_null: 0
+    version: 1
+
+  - name: dpd_slope_3m
+    type: integer
+    sources: [silver.card_accounts.dpd_m01..dpd_m03]
+    recipe: max dpd now minus max dpd 3 months ago (card only; loan dpd_m columns not available)
+    refresh: daily
+    why: direction matters as much as level; rising dpd = act now, falling = soften treatment
+    nullable: true
+    default_on_null: 0
+    version: 1
+
+  - name: utilisation_trend_6m
+    type: double
+    sources: [silver.card_accounts]
+    recipe: avg(utilisation) now (snapshot_date) minus avg(utilisation) 6 months ago on card accounts
+    refresh: daily
+    why: rising utilisation precedes delinquency on cards
+    nullable: true
+    version: 1
+
+  - name: balance_at_risk
+    type: double
+    sources: [gold.c360_account]
+    recipe: sum(current_balance) across primary accounts where dpd > 0
+    refresh: daily
+    why: scoring policy weighs expected uplift by $ at risk; low-balance customers should not grab high-cost channels
+    nullable: false
+    default_on_null: 0.0
+    version: 1
+
+  # ---------- promise behaviour --------------------------------------------------------------
+  - name: broken_promises_90d
+    type: integer
+    sources: [silver.promises_to_pay]
+    recipe: count(ptp where status='broken' and status_ts between as_of - 90d and as_of) across customer's cases
+    refresh: daily
+    why: strongest signal that a verbal PTP will not stick
+    nullable: false
+    default_on_null: 0
+    version: 1
+
+  - name: promise_due_vs_payday_gap_days
+    type: integer
+    sources: [silver.promises_to_pay, silver.deposit_accounts]
+    recipe: median(ptp.due_date - deposit.expected_next_payroll_date) for ptp opened in last 90d
+    refresh: daily
+    why: PTPs due before expected payroll break at ~2x the rate of PTPs due after
+    nullable: true
+    version: 1
+
+  # ---------- deposit cash-flow signals ------------------------------------------------------
+  - name: payroll_delay_days
+    type: integer
+    sources: [silver.deposit_accounts]
+    recipe: max(payroll_delay_days) across the customer's deposit accounts
+    refresh: daily
+    why: a late/missed payroll is upstream of nearly every unforced default
+    nullable: true
+    default_on_null: 0
+    version: 1
+
+  - name: salary_change_3m_pct
+    type: double
+    sources: [silver.deposit_accounts.payroll_amount_change_pct]
+    recipe: payroll_amount_change_pct from the customer's primary deposit account
+    refresh: daily
+    why: direction of salary matters for payment capacity
+    nullable: true
+    version: 1
+
+  - name: nsf_count_3m
+    type: integer
+    sources: [main.account_monthly_snapshot (deposit rows with month_end_date in last 3 months)]
+    recipe: sum of nsf-like events in the last 3 month-ends; falls back to deposit_accounts.nsf_count_mtd
+    refresh: daily
+    why: NSF cluster is a classic distress pattern
+    nullable: false
+    default_on_null: 0
+    version: 1
+
+  - name: cash_flow_slope_6m
+    type: double
+    sources: [silver.deposit_accounts.cash_flow_volatility_6m, net_cash_flow_mtd]
+    recipe: net_cash_flow_mtd / abs(net_cash_flow_mtd) * cash_flow_volatility_6m as a proxy direction*volatility
+    refresh: daily
+    why: trend in cash flow matters for choosing payment plan size
+    nullable: true
+    version: 1
+
+  # ---------- bureau --------------------------------------------------------------------------
+  - name: bureau_present
+    type: boolean
+    sources: [gold.c360_customer.bureau_risk_score IS NOT NULL]
+    recipe: true if the customer has any non-DFI-0812 bureau pull
+    refresh: daily
+    why: lets the tree model treat missingness explicitly; 48% of customers have a bureau pull
+    nullable: false
+    default_on_null: false
+    version: 1
+
+  - name: bureau_delta_90d
+    type: integer
+    sources: [silver.external.risk_score_delta_90d (latest pull per subject)]
+    recipe: risk_score_delta_90d of the latest non-DFI-0812 bureau pull routed through CIF -> golden_id
+    refresh: daily
+    why: short-horizon risk shift tends to precede collection events
+    nullable: true     # NULL for ~52% of customers (no bureau pull); do NOT impute
+    coverage: 0.48
+    version: 1
+
+  # ---------- contact behaviour --------------------------------------------------------------
+  - name: contacts_last_7d
+    type: integer
+    sources: [silver.contact_history]
+    recipe: count(outbound contacts) in [as_of - 7d, as_of] across any of the customer's member CRM ids
+    refresh: daily
+    why: 7-day contact cap is a policy input; also a load signal for the dialer
+    nullable: false
+    default_on_null: 0
+    version: 1
+
+  - name: answer_rate_30d
+    type: double
+    sources: [silver.contact_history, main.code_lookups]
+    recipe: |
+      count(outbound call where outcome_code in RPC set) / count(outbound call) in last 30d
+      RPC set = outcome codes with attributes_json counts_as_rpc = true
+    refresh: daily
+    why: picks the dial-vs-digital decision; also used by best_time_band computation
+    nullable: true     # customers never called have no rate
+    version: 1
+
+  - name: best_time_band_hour
+    type: integer
+    sources: [silver.contact_history]
+    recipe: hour of day (0-23) with the highest RPC rate in the customer's own 90-day call history; else null
+    refresh: daily
+    why: per-customer time-of-day; feeds call_best_time action
+    nullable: true
+    version: 1
+
+  # ---------- text features from Layer 3 classifiers / rules --------------------------------
+  - name: txt_hardship_signal
+    type: enum[none, possible, clear]
+    sources: [gold.text_features_notes, gold.text_features_transcripts]
+    recipe: argmax of hardship classifier across the customer's notes AND transcripts in last 90d; "clear" wins over "possible" wins over "none"
+    refresh: on text ingest
+    model: tfidf-logreg hardship_v1
+    why: structured hardship_flag only flips when an agent remembers to code it; this picks up stated hardship earlier
+    nullable: false
+    default_on_null: "none"
+    version: 1
+
+  - name: txt_delay_reason
+    type: enum[reduced_income, forgot, dispute, timing, other, unknown]
+    sources: [gold.text_features_notes, gold.text_features_transcripts]
+    recipe: argmax of delay_reason classifier on most recent notes/transcripts in last 90d
+    refresh: on text ingest
+    model: tfidf-logreg delay_reason_v1
+    why: routes the recommended action (reduced_income -> hardship_referral; dispute -> investigate; forgot -> digital_nudge)
+    nullable: false
+    default_on_null: "unknown"
+    version: 1
+
+  - name: txt_ptp_mentioned
+    type: boolean
+    sources: [gold.text_features_notes, gold.text_features_transcripts]
+    recipe: any note/transcript in last 90d classified ptp_mentioned=true
+    refresh: on text ingest
+    model: tfidf-logreg ptp_mentioned_v1
+    why: a verbal/informal promise not entered in promises_to_pay still matters
+    nullable: false
+    default_on_null: false
+    version: 1
+
+  - name: txt_ptp_intent_strength
+    type: double
+    sources: [gold.text_features_notes, gold.text_features_transcripts]
+    recipe: max intent_strength score (regression 0..1) over last 90d texts where ptp_mentioned
+    refresh: on text ingest
+    model: tfidf-ridge ptp_intent_v1
+    why: strength is a better proxy for kept-rate than mere presence
+    nullable: true
+    version: 1
+
+  - name: txt_sentiment
+    type: enum[cooperative, neutral, distressed, hostile]
+    sources: [gold.text_features_notes, gold.text_features_transcripts]
+    recipe: argmax over last 7-day texts; "hostile" wins ties
+    refresh: on text ingest
+    model: tfidf-logreg sentiment_v1
+    why: hostile sentiment routes to supervisor; distressed softens treatment
+    nullable: false
+    default_on_null: "neutral"
+    version: 1
+
+  - name: vulnerability_signal
+    type: boolean
+    sources: [silver.customers.vulnerability_flag, gold.text_features_* vulnerability predictions]
+    recipe: |
+      structured vulnerability_flag OR (classifier predicts true AND confidence > 0.8).
+      Protective OR semantics: the text classifier only tips vulnerability_signal TO TRUE, never away.
+    refresh: on text ingest
+    model: tfidf-logreg vulnerability_v1 (55 positives in notes; see text_feature_eval.md caveat)
+    why: vulnerability is protective; a false negative is costlier than a false positive
+    nullable: false
+    default_on_null: false
+    version: 1
+
+  - name: txt_dispute_mention
+    type: boolean
+    sources: [agent_notes.note_text, call_transcripts (JSON)]
+    recipe: regex match on 'dispute|charge|refund|not auth|cash?back' (bilingual: 'contest|frais|rembours') AND NOT 'no dispute'
+    refresh: on text ingest
+    model: regex rule (label too sparse to classify - 8 notes true)
+    why: structured dispute_flag misses customer verbal mentions; useful alongside c360_case.dispute_flag
+    nullable: false
+    default_on_null: false
+    version: 1
+
+  # ---------- NOT A FEATURE: diagnostic for governance (do not pass to models) -------------
+  - name: txt_next_step
+    type: enum[call_back, send_payment_link, hardship_plan_review, dispute_investigate, escalate_supervisor, none]
+    is_model_input: false
+    sources: [gold.text_features_notes]
+    recipe: classifier argmax
+    why: used in a later governance check - how often does the agent's own stated next step match our policy_gate recommendation?
+    version: 1
+
+  - name: txt_legal_threat_by_agent
+    type: boolean
+    is_model_input: false
+    sources: [gold.text_features_transcripts]
+    recipe: regex rule on agent turns of the transcript
+    why: QA-only (CLAUDE.md policy violation to threaten); never a model input
+    version: 1
