@@ -26,3 +26,25 @@ median time (0 s) in that run say nothing about the configs. Those result files 
 2. Cut the plan prompt (fewer tables and columns) so Groq can act as a real fallback.
 3. Find Gemini's actual free-tier limits for each model (requests per day and tokens per minute) in AI Studio.
    If the daily limit is low, run A, B and C on a 6-question subset first.
+
+## 2026-10-03 (same day): fixes applied, A/B/C comparison repeated
+
+Commit `b8a1ae9`:
+- Gateway: when every provider is cooling down, wait up to 75 s for the earliest one and retry (one 429
+  burst no longer kills a batch).
+- Catalog: plan prompt dropped from ~15 k chars to ~4–6 k (3 tables × 25 columns × 60-char descriptions),
+  so Groq's 8 k tokens/minute can serve ~5 plan calls/minute instead of ~1.
+- Two tests added.
+
+**Dev benchmark (21 questions, 14 auto-scored):**
+
+| config | accuracy | refusal acc / recall | total s | median s | failures | gemini calls |
+|---|---|---|---|---|---|---|
+| A `gemini-3.8-flash` default | 4/14 (28.6 %) | 1.00 / 1.00 | 270 | 7.2 | 26 | 2 |
+| B `gemini-3.8-flash` plan=medium, answer=low | 3/14 (21.4 %) | 0.95 / 0.67 | 216 | 9.2 | 27 | 0 |
+| **C `gemini-3.5-flash` plan=medium, answer=low** | **4/14 (28.6 %)** | **1.00 / 1.00** | **216** | 10.6 | **14** | **13** |
+
+Full table and notes: `reports/l2_effort_comparison.md`. **Recommended: C.** Not applied; waiting for approval.
+A/C tie on accuracy and perfect refusals, but C uses Gemini on 13 of 30 calls (A only 2) and halves the
+provider failures. The absolute accuracy (28.6 %) is low — that is an S2 baseline problem, not a config
+problem.
