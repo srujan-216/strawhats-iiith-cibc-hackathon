@@ -1,0 +1,9 @@
+warehouse/
+logs/
+__pycache__/
+*.pyc
+.env
+maple_data/
+*.duckdb
+*.pkl
+submissions/*_dev.csv

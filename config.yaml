@@ -1,0 +1,48 @@
+# Edit data_dir to where you unzipped the release
+data_dir: ../maple_data/maple_collections_release
+db_path: warehouse/maple.duckdb
+
+# Folders inside data_dir that must NEVER be visible to the NL-to-SQL layer
+# (gold answers and labels live here).
+hidden_dirs: [labels]
+
+# ---------------------------------------------------------------------------
+# LLM gateway: FREE providers only, all OpenAI-compatible.
+# Providers are tried in the order given by the route; a provider is skipped if its
+# API key env var is not set on this machine, and put on cool-down when it hits a limit.
+# Check current free model names before use:
+#   Gemini: https://aistudio.google.com  (Get API key; pick a free "Flash" model)
+#   Groq:   https://console.groq.com/docs/models
+# ---------------------------------------------------------------------------
+llm:
+  temperature: 0
+  max_tokens: 1500
+  redact_pii: false            # data is synthetic; turn on to demo the gateway
+  cache_path: warehouse/llm_cache.sqlite
+  providers:
+    - name: local              # vLLM / Ollama on Varshith's GPU (free, no limits)
+      base_url: http://localhost:8000/v1     # Srujan: set to Varshith's Tailscale IP, e.g. http://100.x.y.z:8000/v1
+      model: Qwen/Qwen2.5-Coder-14B-Instruct # must match the model the server is running
+      api_key_env: null
+      rpm: 0                   # 0 = no pacing
+      timeout_s: 180
+    - name: gemini             # Google AI Studio free tier
+      base_url: https://generativelanguage.googleapis.com/v1beta/openai
+      model: gemini-2.5-flash  # CHANGE to the current free Flash model shown in AI Studio
+      api_key_env: GEMINI_API_KEY
+      rpm: 8                   # stay under the free per-minute limit
+    - name: groq               # Groq free tier (token caps per day are low on 70B models)
+      base_url: https://api.groq.com/openai/v1
+      model: llama-3.3-70b-versatile   # CHANGE if Groq has retired it
+      api_key_env: GROQ_API_KEY
+      rpm: 25
+  routes:                      # which providers each task uses, in order
+    default: [gemini, local, groq]   # Q&A planning and answers: best quality first
+    bulk: [local]                    # text-feature labelling of thousands of notes: GPU only
+
+guard:
+  row_limit: 1000
+  timeout_s: 30
+  max_retries: 2
+
+audit_log: logs/audit.jsonl
