@@ -71,7 +71,8 @@ class QA:
     # ------------------------------------------------------------------
     def answer(self, question: str, as_of: str | None = None) -> dict:
         as_of = as_of or DEFAULT_AS_OF
-        res = {"question": question, "answer": "", "sql_or_sources": "", "refused": False, "reasoning": ""}
+        res = {"question": question, "answer": "", "sql_or_sources": "", "refused": False,
+               "reasoning": "", "badge": ""}
         rule = self._rule_scope(question)
         if rule:
             return self._refuse(res, rule, "rule")
@@ -84,13 +85,25 @@ class QA:
         action = (plan.get("action") or "").lower()
         self.audit.write("plan", question=question, action=action, metric_id=plan.get("metric_id"), tables=tables)
 
+        # certified = planner matched one of our metric_definitions; exploratory otherwise
+        res["badge"] = "certified" if plan.get("metric_id") else "exploratory"
         if action == "refuse":
             return self._refuse(res, plan.get("reason", "out of scope"), "llm")
         if action == "docs":
-            return self._answer_docs(res, question, plan.get("doc_query") or question)
+            return self._check_grounding(self._answer_docs(res, question, plan.get("doc_query") or question))
         if action in ("sql", "text_sql"):
-            return self._answer_sql(res, question, user, plan, action)
+            return self._check_grounding(self._answer_sql(res, question, user, plan, action))
         return self._refuse(res, "could not map the question to the available data", "planner")
+
+    def _check_grounding(self, res: dict) -> dict:
+        """Non-refusal answers must carry SQL or at least one citation, a reasoning line, and a badge.
+        If any is empty the answer is downgraded to a refusal: never ship a confident wrong answer."""
+        if res["refused"]:
+            return res
+        missing = [k for k in ("sql_or_sources", "reasoning", "badge") if not str(res.get(k, "")).strip()]
+        if missing:
+            return self._refuse(res, f"answer missing required grounding ({', '.join(missing)})", "grounding")
+        return res
 
     # ------------------------------------------------------------------
     def _rule_scope(self, q: str) -> str | None:
@@ -102,7 +115,8 @@ class QA:
         return None
 
     def _refuse(self, res: dict, reason: str, by: str) -> dict:
-        res.update(answer=f"I can't answer this. {reason}", refused=True, reasoning=f"refused by {by}")
+        res.update(answer=f"I can't answer this. {reason}", refused=True, reasoning=f"refused by {by}",
+                   badge="refused")
         self.audit.write("refusal", question=res["question"], reason=reason, by=by)
         return res
 
@@ -125,8 +139,14 @@ class QA:
                                          "Return corrected JSON.", purpose="sql_fix")
             sql_in = fix.get("sql") or sql_in
         else:
-            res.update(answer="I couldn't run a valid query for this question.", sql_or_sources=sql_in,
-                       reasoning=last_err)
+            # retries exhausted: refuse with the last error summary; sql shown so a human can fix it
+            res["sql_or_sources"] = sql_in
+            return self._refuse(res, f"could not produce a valid query (last error: {last_err[:200]})", "sql_retry")
+        if len(df) == 0:
+            # zero rows: never invent a number; show the SQL that returned nothing
+            res.update(answer="I don't have data for that.", sql_or_sources=sql,
+                       reasoning="query returned 0 rows")
+            self.audit.write("answer_empty", question=question, sql=sql)
             return res
         rows = df.head(40).to_csv(index=False)
         final = self.llm.complete_json(ANSWER_SYSTEM, f"QUESTION: {question}\nSQL:\n{sql}\nRESULT ({len(df)} rows):\n{rows}",
@@ -138,7 +158,7 @@ class QA:
     def _answer_docs(self, res, question, query) -> dict:
         hits = self.docs.search(query, k=5)
         if not hits:
-            return self._refuse(res, "no current policy document covers this question", "retrieval")
+            return self._refuse(res, "no current policy covers this", "retrieval")
         ctx = "\n\n".join(f"[{h['doc_id']} v{h['version']} s:{h['section']}]\n{h['text'][:1500]}" for h in hits)
         final = self.llm.complete_json(ANSWER_SYSTEM, f"QUESTION: {question}\nDOCUMENTS:\n{ctx}", purpose="answer_docs")
         sources = "; ".join(dict.fromkeys(f"{h['doc_id']} v{h['version']} ({h['section']})" for h in hits))
