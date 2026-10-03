@@ -7,3 +7,4 @@ maple_data/
 *.duckdb
 *.pkl
 submissions/*_dev.csv
+.venv/

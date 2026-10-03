@@ -11,6 +11,7 @@ sqlglot>=25
 rank-bm25>=0.2
 pypdf>=4
 requests>=2.31         # OpenAI-compatible calls to free providers and local vLLM/Ollama
+python-dotenv>=1.0     # loads .env (API keys) in src/common/config.py
 # later layers (install when you reach them)
 # splink>=4  pandera>=0.20  lightgbm>=4  shap>=0.45  scikit-learn>=1.4
 # sentence-transformers>=3  faiss-cpu>=1.8  feast>=0.40  streamlit>=1.38
