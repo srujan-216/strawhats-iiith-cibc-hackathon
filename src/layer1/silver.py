@@ -344,8 +344,9 @@ def run_silver(cfg: dict, sample_n: int | None = None, tables: list[str] | None 
     t0 = time.time()
     con = duckdb.connect(cfg["db_path"])
     tmp = str((__import__("pathlib").Path(cfg["db_path"]).parent / "tmp").resolve())
-    con.execute(f"SET temp_directory='{tmp}'; SET memory_limit='{cfg.get('silver', {}).get('memory_limit', '4GB')}'; "
-                "SET preserve_insertion_order=false;")
+    scfg = cfg.get("silver", {})   # laptop: small limits (spills to disk); GPU workstation: raise them
+    con.execute(f"SET temp_directory='{tmp}'; SET memory_limit='{scfg.get('memory_limit', '4GB')}'; "
+                f"SET threads={int(scfg.get('threads', 4))}; SET preserve_insertion_order=false;")
     con.execute(MACROS)
     con.execute("CREATE SCHEMA IF NOT EXISTS silver")
     con.execute("""CREATE TABLE IF NOT EXISTS silver.fix_log (run_ts TIMESTAMP, table_name VARCHAR, rule VARCHAR,
@@ -357,7 +358,11 @@ def run_silver(cfg: dict, sample_n: int | None = None, tables: list[str] | None 
         build_sample(con, sample_n, log=log)
     out = [build_table(con, t, run, sample_n, log) for t in (tables or TABLES)]
 
-    # DC-COLL-001: orphan contacts must stay below 1%
+    # DC-COLL-001: orphan contacts must stay below 1% (only when contact_history was rebuilt in this run)
+    if "contact_history" not in (tables or TABLES):
+        log(f"  silver done in {time.time() - t0:.1f}s; fix_log run_id={run['run_id']}")
+        con.close()
+        return out
     o = con.execute("""SELECT count(*) FILTER (WHERE list_contains(dq_flags, 'orphan_case')), count(*)
                        FROM silver.contact_history""").fetchone()
     rate = 100.0 * o[0] / max(o[1], 1)

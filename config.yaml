@@ -46,3 +46,7 @@ guard:
   max_retries: 2
 
 audit_log: logs/audit.jsonl
+
+silver:
+  memory_limit: 2GB            # laptop (16 GB RAM, shared); Varshith can raise to 16GB+ on the workstation
+  threads: 4
