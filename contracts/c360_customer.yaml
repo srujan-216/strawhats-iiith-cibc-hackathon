@@ -1,0 +1,212 @@
+contract_id: C360-CUSTOMER-001
+based_on: DC-COLL-001                       # see files/docs/data_contracts/DC-COLL-001_v1.0_EN.md
+version: 1.0
+effective_date: 2026-10-03
+owner:
+  team: Collections Data Office (team Straw Hats)
+  tech_contact: snchakrimakkarajpet@gmail.com
+refresh:
+  frequency: daily
+  target_time: "05:00 ET"
+  sla_minutes: 60
+lineage:
+  upstream: [silver.customers, silver.id_xref, silver.external, main.account_monthly_snapshot]
+  built_by: src/layer1/c360.py (build_c360)
+  deployed_as: gold.c360_customer
+primary_key: golden_id
+grain: one row per resolved customer identity (merged across the five source systems)
+allowed_uses:
+  - collections operations
+  - analytics
+  - uplift / NBA model training
+  - supervisor / steward queues
+prohibited_uses:
+  - marketing (CASL)
+  - fairness scoring outside src/governance/fairness.py (protected attributes are not in this table)
+  - any decision that reads age / age_band / FSA-area income / majority_language
+schema:
+  - name: golden_id
+    type: VARCHAR
+    class: identifier
+    source: silver.id_xref (match_method = crm_identity)
+    required: true
+  - name: member_crm_ids
+    type: VARCHAR[]
+    class: identifier
+    source: silver.customers (all CRM records in the cluster)
+  - name: member_count
+    type: BIGINT
+    class: metadata
+  - name: live_member_count
+    type: BIGINT
+    class: metadata
+  - name: primary_phone_e164
+    type: VARCHAR
+    class: contact
+    source: silver.customers (most recently updated live record)
+  - name: email
+    type: VARCHAR
+    class: contact
+    source: silver.customers (most recently verified live record)
+  - name: email_verified_flag
+    type: BOOLEAN
+    class: contact
+  - name: postal_code
+    type: VARCHAR
+    class: contact
+    source: silver.customers (most recently updated address)
+  - name: province_code
+    type: VARCHAR
+    class: contact
+  - name: fsa
+    type: VARCHAR
+    class: contact
+  - name: country_code
+    type: VARCHAR
+    class: contact
+  - name: time_zone
+    type: VARCHAR
+    class: contact
+  - name: first_name
+    type: VARCHAR
+    class: identity
+    source: silver.customers (most recent live)
+  - name: last_name
+    type: VARCHAR
+    class: identity
+  - name: date_of_birth
+    type: DATE
+    class: identity
+  - name: dob_ambiguous
+    type: BOOLEAN
+    class: quality
+  - name: consent_call
+    type: BOOLEAN
+    class: consent
+    survivorship: AND (most restrictive)
+  - name: consent_call_mobile
+    type: BOOLEAN
+    class: consent
+    survivorship: AND
+  - name: consent_autodialer
+    type: BOOLEAN
+    class: consent
+    survivorship: AND
+  - name: consent_sms
+    type: BOOLEAN
+    class: consent
+    survivorship: AND
+  - name: consent_email
+    type: BOOLEAN
+    class: consent
+    survivorship: AND
+  - name: consent_push
+    type: BOOLEAN
+    class: consent
+    survivorship: AND
+  - name: consent_letter
+    type: BOOLEAN
+    class: consent
+    survivorship: AND
+  - name: casl_express_consent_email
+    type: BOOLEAN
+    class: consent
+    survivorship: AND
+  - name: voicemail_permitted
+    type: BOOLEAN
+    class: consent
+    survivorship: AND
+  - name: cease_contact_flag
+    type: BOOLEAN
+    class: protective
+    survivorship: OR (true if any source)
+  - name: cease_contact_date
+    type: DATE
+    class: protective
+  - name: vulnerability_flag
+    type: BOOLEAN
+    class: protective
+    survivorship: OR
+  - name: vulnerability_type
+    type: VARCHAR
+    class: protective
+  - name: deceased_flag
+    type: BOOLEAN
+    class: protective
+    survivorship: OR
+  - name: deceased_notified_date
+    type: DATE
+    class: protective
+  - name: insolvency_filed_date
+    type: DATE
+    class: protective
+  - name: insolvency_flag
+    type: BOOLEAN
+    class: protective
+    survivorship: OR
+  - name: has_deleted_member
+    type: BOOLEAN
+    class: metadata
+  - name: is_all_deleted
+    type: BOOLEAN
+    class: metadata
+  - name: last_profile_update_ts
+    type: TIMESTAMP
+    class: metadata
+  - name: bureau_risk_score
+    type: BIGINT
+    class: external
+    source: latest non-DFI-0812 external.risk_score for any member CIF
+  - name: bureau_pull_date
+    type: DATE
+    class: external
+  - name: deceased_any_source
+    type: BOOLEAN
+    class: protective
+    survivorship: OR (customer + external bureau)
+  - name: insolvency_any_source
+    type: BOOLEAN
+    class: protective
+    survivorship: OR (customer + external bureau)
+  - name: refreshed_at
+    type: TIMESTAMP
+    class: metadata
+  - name: lineage
+    type: VARCHAR
+    class: metadata
+quality_rules:
+  - id: Q1_customer_golden_coverage
+    rule: every golden_id in silver.id_xref (source_system='crm') is present in c360_customer
+    threshold: failing = 0
+  - id: Q2_account_golden_coverage
+    rule: every c360_account.golden_id resolves to c360_customer
+    threshold: failing = 0
+  - id: Q3_live_account_has_product_and_status
+    rule: active accounts have both product_code and account_status
+    threshold: failing = 0
+  - id: Q4_hardship_supportive_next_action
+    rule: hardship cases do NOT schedule a harsher next action (legal_handoff, escalation,
+          final_demand_letter, debt_sale, legal_recovery)
+    threshold: failing = 0 (CLAUDE.md section 4.6)
+  - id: Q5_cease_contact_customers_no_future_outbound
+    rule: cease-contact customers have no outbound contact scheduled on or after as_of
+    threshold: failing = 0
+  - id: Q6_primary_phone_e164_valid_for_active_cases
+    rule: open cases carry a valid NANP primary phone for the customer
+    threshold: failing <= 5% (warning)
+  - id: Q7_orphan_contacts_rate_lt_1pct_DC_COLL_001
+    rule: contact_history orphan rate under 1% (DC-COLL-001)
+    threshold: observed_rate < 1.0%
+protected_attributes_excluded:
+  - gender_code
+  - marital_status
+  - citizenship_status
+  - household_size
+  - dependants_count
+  - newcomer_program_flag
+  - vulnerability_type_detail
+  - accent / voice biometrics
+  - age, age_band
+  - cpp_oas_deposit_flag, ccb_deposit_flag
+  - fsa_income_index (if present)
+  - majority_language
