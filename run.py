@@ -27,6 +27,10 @@ def main(argv=None):
     mt = sub.add_parser("match"); mt.add_argument("--sample", type=int, default=None)
     sub.add_parser("c360")
     sub.add_parser("dq-report")
+    ft = sub.add_parser("features"); ft.add_argument("--sample", type=int, default=None)
+    ft.add_argument("--dates", nargs="*", default=None, help="decision_dates (default: SNAPSHOT_DATE)")
+    sub.add_parser("text-features")   # train 6 classifiers + score all notes/transcripts
+    sub.add_parser("feature-report")  # reports/feature_report.md
     al = sub.add_parser("all")
     al.add_argument("--sample", type=int, default=None, help="pass to each stage (optional)")
     a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--as-of", default=None)
@@ -65,6 +69,15 @@ def main(argv=None):
     elif args.cmd == "dq-report":
         from src.layer1.dq_report import write_dq_report
         print(write_dq_report(cfg))
+    elif args.cmd == "features":
+        from src.layer3.features import build_offline
+        print(json.dumps(build_offline(cfg, args.dates, args.sample), indent=2))
+    elif args.cmd == "text-features":
+        from src.layer3.text_classifier import train_and_score
+        train_and_score(cfg)
+    elif args.cmd == "feature-report":
+        from src.layer3.feature_report import build_report
+        print(build_report(cfg))
     elif args.cmd == "all":
         import time
         from src.layer1.register import register_all
