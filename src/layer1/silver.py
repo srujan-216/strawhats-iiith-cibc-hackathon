@@ -258,11 +258,11 @@ def build_table(con, t: str, run: dict, sample_n: int | None, log=print) -> dict
     # 2. log value-level rules from the staged rows (one aggregate query)
     checks = []   # (rule, changed-condition, before, after)
     for c, (rule, expr) in replace.items():
-        checks.append((rule if not rule.startswith("code_") else f"{rule}:{c}",
+        checks.append((rule if ":" in rule else f"{rule}:{c}",
                        f"{_q(c)} IS DISTINCT FROM ({expr})", _q(c), f"({expr})"))
     for c, (rule, expr, src) in add.items():
         if rule and src:
-            checks.append((rule if rule != "dob_parse" else f"dob_parse:{src}",
+            checks.append((f"{rule}:{c}",
                            f"{_q(src)} IS NOT NULL AND ({expr}) IS NOT NULL AND {_q(src)} IS DISTINCT FROM CAST(({expr}) AS VARCHAR)",
                            _q(src), f"({expr})"))
     for flag, cond in spec.get("flags", []):
@@ -278,7 +278,7 @@ def build_table(con, t: str, run: dict, sample_n: int | None, log=print) -> dict
         res = con.execute(f"SELECT {', '.join(parts)} FROM stg").fetchone()
         for i, (rule, *_rest) in enumerate(checks):
             n, b, a = res[3 * i: 3 * i + 3]
-            if n or not rule.startswith("code_"):
+            if n or not rule.startswith("code_upper_trim"):
                 _log(con, run, t, rule, n, n_in, b, a)
 
     # 3. transform: replaced columns, added columns, dq_flags, lineage
