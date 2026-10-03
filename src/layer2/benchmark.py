@@ -51,8 +51,7 @@ def run(cfg, out: str, questions_csv: str | None = None, split: str | None = Non
     qa = QA(cfg)
     mode = "a" if done else "w"
     if not done:
-        out_p.with_suffix(".timing.csv").write_text("question_id,seconds
-", encoding="utf-8")
+        out_p.with_suffix(".timing.csv").write_text("question_id,seconds" + chr(10), encoding="utf-8")
     with open(out_p, mode, newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
         if not done:
@@ -72,7 +71,6 @@ def run(cfg, out: str, questions_csv: str | None = None, split: str | None = Non
             w.writerow(row)
             f.flush()
             with open(out_p.with_suffix(".timing.csv"), "a", encoding="utf-8") as tf:   # seconds per question
-                tf.write(f"{r.question_id},{time.time() - t0:.2f}
-")
+                tf.write(f"{r.question_id},{time.time() - t0:.2f}" + chr(10))
             log(f"[{i}/{len(qs)}] {r.question_id} refused={row['refused']} {time.time()-t0:4.1f}s  {row['answer'][:80]}")
     return str(out_p)
