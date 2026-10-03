@@ -1,5 +1,5 @@
 # Data quality report
-Generated: 2026-10-03 21:22:02
+Generated: 2026-10-03 22:46:08
 
 ## 1. Silver cleaning (one row per rule, latest full run)
 
@@ -44,41 +44,39 @@ Generated: 2026-10-03 21:22:02
 
 ## 2. Gold C360 quality checks
 
-| id                                            | scope                           |   records |   failing | rule                                                                                  | status   |
-|-----------------------------------------------|---------------------------------|-----------|-----------|---------------------------------------------------------------------------------------|----------|
-| Q1_customer_golden_coverage                   | c360_customer                   |         0 |         0 | every golden_id in id_xref present in c360_customer                                   | pass     |
-| Q2_account_golden_coverage                    | c360_account                    |    82,240 |         0 | every account.golden_id resolves to a c360_customer                                   | pass     |
-| Q3_live_account_has_product_and_status        | c360_account                    |    53,966 |         0 | live accounts have product_code AND account_status                                    | pass     |
-| Q4_hardship_supportive_next_action            | c360_case                       |    46,865 |         0 | hardship cases do not schedule harsher treatments (CLAUDE §4.6)                       | pass     |
-| Q5_cease_contact_customers_no_future_outbound | c360_customer x contact_history |       970 |         0 | cease-contact customers have no outbound contact scheduled after as_of                | pass     |
-| Q6_primary_phone_e164_valid_for_active_cases  | c360_customer x c360_case       |     4,067 |        70 | open cases have a valid NANP phone for the customer (gives Layer 4 something to dial) | fail     |
-| Q7_orphan_contacts_rate_lt_1pct_DC_COLL_001   | contact_history                 | 2,560,811 |    25,555 | DC-COLL-001: orphan contact rate under 1% (observed 1.00%)                            | pass     |
+| id                                            | scope                           |   records |   failing | rule                                                                                                                    | status   |
+|-----------------------------------------------|---------------------------------|-----------|-----------|-------------------------------------------------------------------------------------------------------------------------|----------|
+| Q1_customer_golden_coverage                   | c360_customer                   |         0 |         0 | every golden_id in id_xref present in c360_customer                                                                     | pass     |
+| Q2_account_golden_coverage                    | c360_account                    | 1,633,394 |         0 | every account.golden_id resolves to a c360_customer                                                                     | pass     |
+| Q3_live_account_has_product_and_status        | c360_account                    | 1,071,741 |         0 | live accounts have product_code AND account_status                                                                      | pass     |
+| Q4_hardship_supportive_next_action            | c360_case                       |    46,865 |         0 | hardship cases do not schedule harsher treatments (CLAUDE §4.6)                                                         | pass     |
+| Q5_cease_contact_customers_no_future_outbound | c360_customer x contact_history |    19,997 |         0 | cease-contact customers have no outbound contact scheduled after as_of                                                  | pass     |
+| Q6_primary_phone_e164_valid_for_active_cases  | c360_customer x c360_case       |    83,677 |     1,210 | open cases have a valid NANP phone for the customer (gives Layer 4 something to dial) (observed 1.45%; threshold <= 5%) | pass     |
+| Q7_orphan_contacts_rate_lt_1pct_DC_COLL_001   | contact_history                 | 2,560,811 |    25,555 | DC-COLL-001: orphan contact rate under 1% (observed 1.00%)                                                              | pass     |
 
 ## 3. Identity resolution summary (from match report)
 
 # Identity resolution report
-Snapshot: 2026-10-03 21:02:18
-Sample: N=50000 (silver.* sample)
+Snapshot: 2026-10-03 22:22:55
+Sample: N=full customers
 Probabilistic method: **splink** (splink falls back to rules if training fails)
 ## Probabilistic matcher vs deterministic truth (CRM pointer + national_id_hash)
-- Truth pairs: 314
-- Predicted (any band): 756
-- True positives: 313
-- **Recall**: 0.997 (of known CRM duplicates found)
-- **Precision**: 0.414 (floor only: non-truth predictions include real duplicates the CRM did not record, so true precision is higher - needs manual spot-checks)
-> **Reading the numbers.** The only ground truth available on the laptop is pairs the CRM itself marks
-> as duplicates (`duplicate_of_crm_id` pointer or shared `national_id_hash`). Splink finds 99.7% of those
-> and does not predict any pair that we are *sure* is wrong. The 0.414 "precision" therefore is a floor,
-> not a verdict: the gap between recall (0.997) and precision (0.414) is strong evidence that Splink is
-> finding real duplicates the CRM never flagged (same person, two CRM records opened months apart with
-> no national_id captured on one of them). A fair precision number needs manual review of a spot-check
-> set, which is the right job for the steward queue (`silver.steward_queue`).
+- Truth pairs: 18,928
+- Predicted (any band): 27,844
+- True positives: 18,742
+- **Recall**: 0.990 (of known CRM duplicates found)
+- **Precision**: 0.673 (floor only: non-truth predictions include real duplicates the CRM did not record, so true precision is higher - needs manual spot-checks)
 ## Coverage by source
 | source      | keys linked / total   | coverage %   | deterministic %   |
 |-------------|-----------------------|--------------|-------------------|
-| cards       | 29,636/29,636         | 100.0%       | 100.0%            |
-| collections | 17,517/17,517         | 100.0%       | 100.0%            |
-| crm         | 50,287/50,287         | 100.0%       | 100.0%            |
-| deposits    | 34,484/37,482         | 92.0%        | 92.0%             |
-| external    | 25,980/28,805         | 90.2%        | 90.2%             |
-| loans       | 18,118/18,118         | 100.0%       | 100.0%            |
+| cards       | 584,725/660,000       | 88.6%        | 88.6%             |
+| collections | 356,864/367,229       | 97.2%        | 97.2%             |
+| crm         | 1,020,000/1,020,000   | 100.0%       | 100.0%            |
+| deposits    | 686,725/780,000       | 88.0%        | 88.0%             |
+| external    | 514,407/1,000,000     | 51.4%        | 51.4%             |
+| loans       | 360,836/404,500       | 89.2%        | 89.2%             |
+### Bridge-coverage warnings
+- **cards**: deterministic coverage 88.6% - fix the bridge, do not paper over with Splink
+- **deposits**: deterministic coverage 88.0% - fix the bridge, do not paper over with Splink
+- **external**: deterministic coverage 51.4% - fix the bridge, do not paper over with Splink
+- **loans**: deterministic coverage 89.2% - fix the bridge, do not paper over with Splink
