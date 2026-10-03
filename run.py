@@ -3,6 +3,7 @@
   python run.py register            # load all source files into DuckDB (raw + typed)
   python run.py profile [--sample N] # reports/profile.md
   python run.py silver [--sample N]  # cleaned silver.* tables + silver.fix_log
+  python run.py match  [--sample N]  # id_xref (golden_id) + reports/match_report.md
   python run.py ask "question" [--as-of 2026-09-28]
   python run.py bench [--split dev] [--questions extra.csv] [--out submissions/benchmark_answers.csv]
   python run.py eval [--answers submissions/benchmark_answers_dev.csv]
@@ -20,6 +21,7 @@ def main(argv=None):
     pr = sub.add_parser("profile"); pr.add_argument("--sample", type=int, default=None)
     sv = sub.add_parser("silver"); sv.add_argument("--sample", type=int, default=None)
     sv.add_argument("--tables", nargs="*", default=None, help="subset of tables (default: all)")
+    mt = sub.add_parser("match"); mt.add_argument("--sample", type=int, default=None)
     a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--as-of", default=None)
     b = sub.add_parser("bench")
     b.add_argument("--split", default=None); b.add_argument("--questions", default=None)
@@ -47,6 +49,9 @@ def main(argv=None):
                 for t, r, n, i, b, a in fix_log_summary(con)]
         print(tabulate(rows, headers=["table", "rule", "rows", "% of rows in", "example before", "example after"]))
         print(write_fix_log_report(con))
+    elif args.cmd == "match":
+        from src.layer1.match import run_match
+        print(json.dumps(run_match(cfg, args.sample), indent=2))
     elif args.cmd == "ask":
         from src.layer2.qa import QA
         print(json.dumps(QA(cfg).answer(args.question, args.as_of), indent=2, default=str))
