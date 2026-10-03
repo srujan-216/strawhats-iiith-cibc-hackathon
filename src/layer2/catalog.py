@@ -48,7 +48,8 @@ class Catalog:
         cols = x.get("Columns")
         if cols is not None:
             for _, r in cols.iterrows():
-                self.col_desc[(str(r.get("Table")), str(r.get("Column")))] = str(r.get("Description", ""))[:110]
+                # short descriptions keep the plan prompt small (Groq free tier ~8k tokens/min)
+                self.col_desc[(str(r.get("Table")), str(r.get("Column")))] = str(r.get("Description", ""))[:60]
                 if str(r.get("Sensitivity", "")).strip().lower() == "protected attribute":
                     self.protected.add(str(r.get("Column")).lower())
         tabs = x.get("Tables")
@@ -71,7 +72,7 @@ class Catalog:
         m = self.metrics.assign(_s=self.metrics.apply(score, axis=1))
         return m[m._s > 0.9].sort_values("_s", ascending=False).head(k)
 
-    def relevant_tables(self, question: str, metric_rows: pd.DataFrame, k: int = 5) -> list[str]:
+    def relevant_tables(self, question: str, metric_rows: pd.DataFrame, k: int = 3) -> list[str]:
         qt = _tokens(question)
         scores = {}
         for t in self.tables:
@@ -85,17 +86,29 @@ class Catalog:
                     picked.append(t)
         return picked or ["collections_cases", "customers"]
 
-    def schema_block(self, tables: list[str], question: str, max_cols: int = 60) -> str:
+    def schema_block(self, tables: list[str], question: str, max_cols: int = 25) -> str:
+        """List tables and columns. Keep PK/FK/date/status/code columns + any column whose
+        name or description matches a word in the question; cap at max_cols per table."""
         qt = _tokens(question)
         out = []
         for t in tables:
             cols = [(c, ty) for c, ty in self.columns.get(t, []) if c.lower() not in self.protected]
-            def rank(ct):
+
+            def score(ct):
                 c = ct[0].lower()
-                key = c.endswith(("_id", "_ref", "_date", "_ts")) or c in {"status", "segment", "province_code"}
-                return -(3 * key + len(qt & _tokens(c.replace("_", " ") + " " + self.col_desc.get((t, ct[0]), ""))))
-            cols = sorted(cols, key=rank)[:max_cols]
-            lines = [f"- {c} ({ty}): {self.col_desc.get((t, c), '')}" for c, ty in cols]
+                key = (c.endswith(("_id", "_ref", "_date", "_ts", "_code", "_flag"))
+                       or c in {"status", "segment", "province_code", "snapshot_date"})
+                match = len(qt & _tokens(c.replace("_", " ") + " " + self.col_desc.get((t, ct[0]), "")))
+                return 3 * key + 2 * match
+            ranked = sorted(cols, key=lambda ct: -score(ct))
+            # keep every column whose score > 0 (relevant or structural), then fill up to max_cols
+            keep = [ct for ct in ranked if score(ct) > 0][:max_cols]
+            if not keep:
+                keep = ranked[:max_cols]
+            lines = []
+            for c, ty in keep:
+                d = self.col_desc.get((t, c), "")
+                lines.append(f"- {c} ({ty.split('(')[0]}){': ' + d if d else ''}")
             out.append(f"TABLE {t}: {self.table_desc.get(t, '')}\n" + "\n".join(lines))
         return "\n\n".join(out)
 

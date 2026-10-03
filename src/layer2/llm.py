@@ -54,6 +54,7 @@ class ProviderUnavailable(Exception):
 
 
 RETRY_503_AFTER_S = 3.0
+MAX_WAIT_S = 75.0   # how long complete() will wait when every provider is cooling down
 
 
 class LLM:
@@ -82,20 +83,42 @@ class LLM:
             self._audit(purpose, hit[1], 0.0, len(system) + len(user), len(hit[0]), cached=True)
             return hit[0]
         errors = []
-        for p in self._providers():
-            try:
-                t0 = time.time()
-                out = self._call(p, system, user, purpose)
-                self.cache.put(key, out, p["name"])
-                self._audit(purpose, p["name"], time.time() - t0, len(system) + len(user), len(out))
-                return out
-            except ProviderUnavailable as e:
-                errors.append(f"{p['name']}: {e}")
-                if self.audit:
-                    self.audit.write("llm_provider_failed", purpose=purpose, route=self.route,
-                                     provider=p["name"], http_status=e.status, error=str(e)[:200],
-                                     cooldown_s=round(e.cooldown_s))
+        # Two passes: first try any provider that is not cooling down; if every provider is on cool-down,
+        # wait for the earliest one (up to MAX_WAIT_S) so one 429 burst does not kill a batch run.
+        for attempt in (1, 2):
+            for p in self._providers():
+                try:
+                    t0 = time.time()
+                    out = self._call(p, system, user, purpose)
+                    self.cache.put(key, out, p["name"])
+                    self._audit(purpose, p["name"], time.time() - t0, len(system) + len(user), len(out))
+                    return out
+                except ProviderUnavailable as e:
+                    errors.append(f"{p['name']}: {e}")
+                    if self.audit:
+                        self.audit.write("llm_provider_failed", purpose=purpose, route=self.route,
+                                         provider=p["name"], http_status=e.status, error=str(e)[:200],
+                                         cooldown_s=round(e.cooldown_s))
+            if attempt == 1 and self._wait_for_cooldown():
+                continue
+            break
         raise RuntimeError("all LLM providers unavailable: " + " | ".join(errors))
+
+    def _wait_for_cooldown(self) -> bool:
+        """Wait up to MAX_WAIT_S for the earliest cooling-down provider in this route to recover.
+        Returns True if we waited (caller should retry), False if there is nothing to wait for."""
+        now = time.time()
+        waits = [self._cooldown_until.get(p["name"], 0) - now
+                 for p in self._route_providers()
+                 if not (p.get("api_key_env") and not os.environ.get(p["api_key_env"]))]
+        waits = [w for w in waits if w > 0]
+        if not waits:
+            return False
+        delay = min(min(waits), MAX_WAIT_S)
+        if delay <= 0:
+            return False
+        time.sleep(delay)
+        return True
 
     def complete_json(self, system: str, user: str, purpose: str = "") -> dict:
         raw = self.complete(system + "\nRespond with one JSON object only. No markdown fences.", user, purpose)

@@ -112,3 +112,43 @@ def test_reasoning_effort_per_purpose_and_cache_key(tmp_path):
     LLM(cfg).complete("s", "u", purpose="plan")              # same settings -> cached
     assert len(Echo.bodies) == 3
     srv.shutdown()
+
+
+class TooMany(BaseHTTPRequestHandler):
+    hits = 0
+
+    def do_POST(self):
+        self.rfile.read(int(self.headers["Content-Length"]))
+        TooMany.hits += 1
+        if TooMany.hits <= 2:
+            body = json.dumps({"error": {"message": "rate limit"}}).encode()
+            self.send_response(429); self.send_header("retry-after", "1"); self.end_headers()
+            self.wfile.write(body)
+            return
+        body = json.dumps({"choices": [{"message": {"content": '{"answer": "ok"}'}}]}).encode()
+        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+def test_waits_for_cooldown_when_every_provider_is_limited(tmp_path, monkeypatch):
+    import src.layer2.llm as llm_mod
+    monkeypatch.setattr(llm_mod, "MAX_WAIT_S", 3.0)   # bound the wait in tests
+    TooMany.hits = 0
+    srv = HTTPServer(("127.0.0.1", 0), TooMany)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    cfg = {"llm": {"cache_path": str(tmp_path / "c.sqlite"), "providers": [
+        {"name": "a", "base_url": base + "/a", "model": "m", "api_key_env": None, "rpm": 0},
+        {"name": "b", "base_url": base + "/b", "model": "m", "api_key_env": None, "rpm": 0}],
+        "routes": {"default": ["a", "b"]}}}
+    audit = FakeAudit()
+    out = LLM(cfg, audit=audit).complete_json("s", "u-wait", purpose="plan")
+    assert out["answer"] == "ok"
+    # 2 providers rate-limited on first pass, then wait, then one succeeds on second pass
+    assert TooMany.hits == 3
+    failed = [e for e in audit.events if e["event"] == "llm_provider_failed"]
+    assert len(failed) == 2 and {e["provider"] for e in failed} == {"a", "b"}
+    srv.shutdown()
