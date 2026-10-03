@@ -35,3 +35,48 @@ def test_fallback_and_cache(tmp_path):
     assert llm.complete_json("s", "u")["answer"] == "42"      # served from cache
     assert CALLS == {"limited": 1, "ok": 1}
     srv.shutdown()
+
+
+class FakeAudit:
+    def __init__(self):
+        self.events = []
+
+    def write(self, event, **fields):
+        self.events.append({"event": event, **fields})
+
+
+class Overloaded(BaseHTTPRequestHandler):
+    hits = 0
+
+    def do_POST(self):
+        self.rfile.read(int(self.headers["Content-Length"]))
+        Overloaded.hits += 1
+        body = json.dumps([{"error": {"code": 503, "message": "This model is currently experiencing high demand."}}]).encode()
+        self.send_response(503); self.send_header("retry-after", "7"); self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+def test_503_retried_once_and_failures_audited(tmp_path, monkeypatch):
+    import src.layer2.llm as llm_mod
+    monkeypatch.setattr(llm_mod, "RETRY_503_AFTER_S", 0)
+    bad = HTTPServer(("127.0.0.1", 0), Overloaded)
+    good = HTTPServer(("127.0.0.1", 0), H)
+    for s in (bad, good):
+        threading.Thread(target=s.serve_forever, daemon=True).start()
+    cfg = {"llm": {"cache_path": str(tmp_path / "c.sqlite"), "providers": [
+        {"name": "gem", "base_url": f"http://127.0.0.1:{bad.server_port}", "model": "m", "api_key_env": None, "rpm": 0},
+        {"name": "grq", "base_url": f"http://127.0.0.1:{good.server_port}/ok", "model": "m", "api_key_env": None, "rpm": 0}],
+        "routes": {"default": ["gem", "grq"]}}}
+    audit = FakeAudit()
+    out = LLM(cfg, audit=audit).complete_json("s", "u2", purpose="plan")
+    assert out["answer"] == "42"
+    assert Overloaded.hits == 2                                  # first try + one retry
+    failed = [e for e in audit.events if e["event"] == "llm_provider_failed"]
+    assert len(failed) == 2 and all(e["provider"] == "gem" and e["http_status"] == 503 for e in failed)
+    assert failed[-1]["cooldown_s"] == 7 and "high demand" in failed[-1]["error"]
+    assert failed[-1]["purpose"] == "plan"
+    assert [e["provider"] for e in audit.events if e["event"] == "llm_call"] == ["grq"]
+    bad.shutdown(); good.shutdown()

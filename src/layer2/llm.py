@@ -4,6 +4,8 @@
   and our own local model (vLLM or Ollama on the team GPU). No paid APIs.
 - Providers are tried in order. On a rate limit (429), quota error, timeout or 5xx the provider is put
   on cool-down and the next one is tried, so free-tier limits never stop a benchmark run.
+  A 503 ("model overloaded") is retried once on the same provider after 3 s before falling back.
+  Every failed attempt is audited as `llm_provider_failed` so we can see why a provider was skipped.
 - A per-provider pacer keeps us under each free tier's requests-per-minute.
 - Responses are cached on disk (SQLite) by prompt hash: reruns cost no quota and give identical answers.
 - Optional PII redaction before a prompt leaves the process; every call is audited.
@@ -45,7 +47,13 @@ class _Cache:
 
 
 class ProviderUnavailable(Exception):
-    pass
+    def __init__(self, msg: str, status: int | None = None, cooldown_s: float = 0.0):
+        super().__init__(msg)
+        self.status = status
+        self.cooldown_s = cooldown_s
+
+
+RETRY_503_AFTER_S = 3.0
 
 
 class LLM:
@@ -80,6 +88,10 @@ class LLM:
                 return out
             except ProviderUnavailable as e:
                 errors.append(f"{p['name']}: {e}")
+                if self.audit:
+                    self.audit.write("llm_provider_failed", purpose=purpose, route=self.route,
+                                     provider=p["name"], http_status=e.status, error=str(e)[:200],
+                                     cooldown_s=round(e.cooldown_s))
         raise RuntimeError("all LLM providers unavailable: " + " | ".join(errors))
 
     def complete_json(self, system: str, user: str, purpose: str = "") -> dict:
@@ -121,18 +133,27 @@ class LLM:
         body = {"model": p["model"], "temperature": self.c.get("temperature", 0),
                 "max_tokens": self.c.get("max_tokens", 1500),
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
-        try:
-            r = requests.post(p["base_url"].rstrip("/") + "/chat/completions", headers=headers,
-                              json=body, timeout=p.get("timeout_s", 120))
-        except requests.RequestException as e:
-            self._cooldown_until[p["name"]] = time.time() + 30
-            raise ProviderUnavailable(f"network: {str(e)[:120]}")
+        url = p["base_url"].rstrip("/") + "/chat/completions"
+        for attempt in (1, 2):
+            try:
+                r = requests.post(url, headers=headers, json=body, timeout=p.get("timeout_s", 120))
+            except requests.RequestException as e:
+                self._cooldown_until[p["name"]] = time.time() + 30
+                raise ProviderUnavailable(f"network: {str(e)[:120]}", None, 30)
+            if r.status_code == 503 and attempt == 1:   # overloaded: often clears in seconds
+                if self.audit:
+                    self.audit.write("llm_provider_failed", route=self.route, provider=p["name"],
+                                     http_status=503, error="overloaded; retrying once", cooldown_s=0)
+                time.sleep(RETRY_503_AFTER_S)
+                continue
+            break
         if r.status_code == 429 or r.status_code >= 500 or "quota" in r.text[:500].lower():
-            retry = float(r.headers.get("retry-after", 60) or 60)
-            self._cooldown_until[p["name"]] = time.time() + min(retry, 600)
-            raise ProviderUnavailable(f"HTTP {r.status_code} (cool-down {retry:.0f}s)")
+            retry = min(float(r.headers.get("retry-after", 60) or 60), 600)
+            self._cooldown_until[p["name"]] = time.time() + retry
+            raise ProviderUnavailable(f"HTTP {r.status_code}: {_short(r.text)} (cool-down {retry:.0f}s)",
+                                      r.status_code, retry)
         if r.status_code >= 400:
-            raise ProviderUnavailable(f"HTTP {r.status_code}: {r.text[:200]}")
+            raise ProviderUnavailable(f"HTTP {r.status_code}: {_short(r.text)}", r.status_code, 0)
         data = r.json()
         return data["choices"][0]["message"]["content"] or ""
 
@@ -140,6 +161,17 @@ class LLM:
         if self.audit:
             self.audit.write("llm_call", purpose=purpose, route=self.route, provider=provider,
                              latency_s=round(latency, 2), prompt_chars=pchars, output_chars=ochars, cached=cached)
+
+
+def _short(text: str) -> str:
+    """Provider error message in one short line (OpenAI-style {"error": {"message": ...}} if present)."""
+    try:
+        err = json.loads(text)
+        err = err[0] if isinstance(err, list) else err
+        msg = err.get("error", {}).get("message") or text
+    except (ValueError, AttributeError):
+        msg = text
+    return " ".join(str(msg).split())[:150]
 
 
 def parse_json(raw: str) -> dict:
