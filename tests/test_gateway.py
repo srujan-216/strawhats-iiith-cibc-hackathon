@@ -80,3 +80,35 @@ def test_503_retried_once_and_failures_audited(tmp_path, monkeypatch):
     assert failed[-1]["purpose"] == "plan"
     assert [e["provider"] for e in audit.events if e["event"] == "llm_call"] == ["grq"]
     bad.shutdown(); good.shutdown()
+
+
+class Echo(BaseHTTPRequestHandler):
+    bodies = []
+
+    def do_POST(self):
+        Echo.bodies.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+        body = json.dumps({"choices": [{"message": {"content": '{"answer": "ok"}'}}]}).encode()
+        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+def test_reasoning_effort_per_purpose_and_cache_key(tmp_path):
+    srv = HTTPServer(("127.0.0.1", 0), Echo)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    prov = {"name": "g", "base_url": base, "model": "m", "api_key_env": None, "rpm": 0,
+            "reasoning_effort": {"plan": "medium", "answer": "low"}}
+    cfg = {"llm": {"cache_path": str(tmp_path / "c.sqlite"), "providers": [prov], "routes": {"default": ["g"]}}}
+    LLM(cfg).complete("s", "u", purpose="plan")
+    LLM(cfg).complete("s", "u", purpose="other")           # no effort for this purpose: field not sent
+    assert Echo.bodies[0]["reasoning_effort"] == "medium"
+    assert "reasoning_effort" not in Echo.bodies[1]
+    prov["reasoning_effort"] = {"plan": "low"}               # changed effort -> cache miss, new call
+    LLM(cfg).complete("s", "u", purpose="plan")
+    assert len(Echo.bodies) == 3 and Echo.bodies[2]["reasoning_effort"] == "low"
+    LLM(cfg).complete("s", "u", purpose="plan")              # same settings -> cached
+    assert len(Echo.bodies) == 3
+    srv.shutdown()

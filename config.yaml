@@ -30,6 +30,9 @@ llm:
       base_url: https://generativelanguage.googleapis.com/v1beta/openai
       model: gemini-3.8-flash  # newest plain Flash in /v1beta/openai/models (checked 2026-10-03)
       api_key_env: GEMINI_API_KEY
+      # reasoning_effort: sent only when set. A string applies to every call, or per purpose:
+      #   {plan: medium, sql_fix: medium, answer: low, answer_docs: low}   (config "B", pending benchmark)
+      reasoning_effort: null
       rpm: 8                   # stay under the free per-minute limit
     - name: groq               # Groq free tier (token caps per day are low on 70B models)
       base_url: https://api.groq.com/openai/v1

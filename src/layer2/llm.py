@@ -73,7 +73,10 @@ class LLM:
             user = redact(user)
         if self.mock:
             return self.mock(system, user)
-        key = hashlib.sha256(json.dumps([self.route, system, user]).encode()).hexdigest()
+        # cache key includes each candidate provider's model and reasoning effort for this purpose,
+        # so changing either never returns a stale answer
+        knobs = [(p["name"], p.get("model"), self._effort(p, purpose)) for p in self._route_providers()]
+        key = hashlib.sha256(json.dumps([self.route, system, user, knobs]).encode()).hexdigest()
         hit = self.cache.get(key)
         if hit:
             self._audit(purpose, hit[1], 0.0, len(system) + len(user), len(hit[0]), cached=True)
@@ -82,7 +85,7 @@ class LLM:
         for p in self._providers():
             try:
                 t0 = time.time()
-                out = self._call(p, system, user)
+                out = self._call(p, system, user, purpose)
                 self.cache.put(key, out, p["name"])
                 self._audit(purpose, p["name"], time.time() - t0, len(system) + len(user), len(out))
                 return out
@@ -99,14 +102,24 @@ class LLM:
         return parse_json(raw)
 
     # ------------------------------------------------------------------ internals
-    def _providers(self) -> list[dict]:
+    @staticmethod
+    def _effort(p: dict, purpose: str) -> str | None:
+        """reasoning_effort for this provider and purpose: a string (all purposes) or a
+        {purpose: level, default: level} map in config.yaml. None = provider default (not sent)."""
+        e = p.get("reasoning_effort")
+        if isinstance(e, dict):
+            e = e.get(purpose, e.get("default"))
+        return e or None
+
+    def _route_providers(self) -> list[dict]:
         names = self.c.get("routes", {}).get(self.route) or [p["name"] for p in self.c["providers"]]
         by_name = {p["name"]: p for p in self.c["providers"]}
+        return [by_name[n] for n in names if n in by_name]
+
+    def _providers(self) -> list[dict]:
         out = []
-        for n in names:
-            p = by_name.get(n)
-            if not p:
-                continue
+        for p in self._route_providers():
+            n = p["name"]
             if p.get("api_key_env") and not os.environ.get(p["api_key_env"]):
                 continue  # no key configured on this machine: skip silently
             if time.time() < self._cooldown_until.get(n, 0):
@@ -124,7 +137,7 @@ class LLM:
             time.sleep(wait)
         self._last_call[p["name"]] = time.time()
 
-    def _call(self, p: dict, system: str, user: str) -> str:
+    def _call(self, p: dict, system: str, user: str, purpose: str = "") -> str:
         import requests
         self._pace(p)
         headers = {"Content-Type": "application/json"}
@@ -133,6 +146,9 @@ class LLM:
         body = {"model": p["model"], "temperature": self.c.get("temperature", 0),
                 "max_tokens": self.c.get("max_tokens", 1500),
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        effort = self._effort(p, purpose)
+        if effort:   # only providers configured with reasoning_effort get the field
+            body["reasoning_effort"] = effort
         url = p["base_url"].rstrip("/") + "/chat/completions"
         for attempt in (1, 2):
             try:
