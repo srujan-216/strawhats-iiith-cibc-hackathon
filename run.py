@@ -4,6 +4,9 @@
   python run.py profile [--sample N] # reports/profile.md
   python run.py silver [--sample N]  # cleaned silver.* tables + silver.fix_log
   python run.py match  [--sample N]  # id_xref (golden_id) + reports/match_report.md
+  python run.py c360                 # gold.c360_customer / c360_account / c360_case / field_trust + dq_results
+  python run.py dq-report            # reports/data_quality_report.md
+  python run.py all    [--sample N]  # register -> silver -> match -> c360 -> dq-report
   python run.py ask "question" [--as-of 2026-09-28]
   python run.py bench [--split dev] [--questions extra.csv] [--out submissions/benchmark_answers.csv]
   python run.py eval [--answers submissions/benchmark_answers_dev.csv]
@@ -22,6 +25,10 @@ def main(argv=None):
     sv = sub.add_parser("silver"); sv.add_argument("--sample", type=int, default=None)
     sv.add_argument("--tables", nargs="*", default=None, help="subset of tables (default: all)")
     mt = sub.add_parser("match"); mt.add_argument("--sample", type=int, default=None)
+    sub.add_parser("c360")
+    sub.add_parser("dq-report")
+    al = sub.add_parser("all")
+    al.add_argument("--sample", type=int, default=None, help="pass to each stage (optional)")
     a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--as-of", default=None)
     b = sub.add_parser("bench")
     b.add_argument("--split", default=None); b.add_argument("--questions", default=None)
@@ -52,6 +59,25 @@ def main(argv=None):
     elif args.cmd == "match":
         from src.layer1.match import run_match
         print(json.dumps(run_match(cfg, args.sample), indent=2))
+    elif args.cmd == "c360":
+        from src.layer1.c360 import build_c360
+        print(json.dumps(build_c360(cfg), indent=2))
+    elif args.cmd == "dq-report":
+        from src.layer1.dq_report import write_dq_report
+        print(write_dq_report(cfg))
+    elif args.cmd == "all":
+        import time
+        from src.layer1.register import register_all
+        from src.layer1.silver import run_silver
+        from src.layer1.match import run_match
+        from src.layer1.c360 import build_c360
+        from src.layer1.dq_report import write_dq_report
+        t = time.time(); print("== register"); register_all(cfg).close()
+        print(f"== silver (sample={args.sample})"); run_silver(cfg, args.sample)
+        print(f"== match (sample={args.sample})"); run_match(cfg, args.sample)
+        print("== c360"); build_c360(cfg)
+        print("== dq-report"); print(write_dq_report(cfg))
+        print(f"all stages done in {(time.time()-t)/60:.1f} min")
     elif args.cmd == "ask":
         from src.layer2.qa import QA
         print(json.dumps(QA(cfg).answer(args.question, args.as_of), indent=2, default=str))
