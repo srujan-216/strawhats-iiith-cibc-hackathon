@@ -19,6 +19,8 @@ def v(con, sql, *args):
     ("416-555-0199", "+14165550199"), ("(613) 943-2548", "+16139432548"), ("4163466908", "+14163466908"),
     ("+1 514 368 3648", "+15143683648"), ("438.987.9848", "+14389879848"), ("+1 (365) 881 7097", "+13658817097"),
     ("418-330-612", None),            # 9 digits: truncated, not guessable
+    ("+1 204 889 694", None),         # truncated number behind a +1 prefix (area code would start with 1)
+    ("1234567890", None),             # area code cannot start with 1
     ("367897xxx58", None),            # masked card phone
     (None, None)])
 def test_norm_phone(con, raw, want):
