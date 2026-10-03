@@ -72,5 +72,8 @@ def run(cfg, out: str, questions_csv: str | None = None, split: str | None = Non
             f.flush()
             with open(out_p.with_suffix(".timing.csv"), "a", encoding="utf-8") as tf:   # seconds per question
                 tf.write(f"{r.question_id},{time.time() - t0:.2f}" + chr(10))
-            log(f"[{i}/{len(qs)}] {r.question_id} refused={row['refused']} {time.time()-t0:4.1f}s  {row['answer'][:80]}")
+            # Windows consoles are often cp1252; strip non-ascii from the log line so one accented
+            # character ("Montr\xe9al") doesn't crash the whole benchmark run.
+            safe = row["answer"][:80].encode("ascii", "replace").decode("ascii")
+            log(f"[{i}/{len(qs)}] {r.question_id} refused={row['refused']} {time.time()-t0:4.1f}s  {safe}")
     return str(out_p)
