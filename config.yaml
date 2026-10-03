@@ -28,12 +28,12 @@ llm:
       timeout_s: 180
     - name: gemini             # Google AI Studio free tier
       base_url: https://generativelanguage.googleapis.com/v1beta/openai
-      model: gemini-2.5-flash  # CHANGE to the current free Flash model shown in AI Studio
+      model: gemini-3.8-flash  # newest plain Flash in /v1beta/openai/models (checked 2026-10-03)
       api_key_env: GEMINI_API_KEY
       rpm: 8                   # stay under the free per-minute limit
     - name: groq               # Groq free tier (token caps per day are low on 70B models)
       base_url: https://api.groq.com/openai/v1
-      model: llama-3.3-70b-versatile   # CHANGE if Groq has retired it
+      model: openai/gpt-oss-120b      # llama-3.3-70b retired on Groq; fallback: qwen/qwen3.8-27b (checked 2026-10-03)
       api_key_env: GROQ_API_KEY
       rpm: 25
   routes:                      # which providers each task uses, in order
