@@ -8,3 +8,5 @@ maple_data/
 *.pkl
 submissions/*_dev.csv
 .venv/
+submissions/*_dev_*.csv
+submissions/*.timing.csv
