@@ -10,6 +10,14 @@ Probabilistic method: **splink** (splink falls back to rules if training fails)
 - **Recall**: 0.997 (of known CRM duplicates found)
 - **Precision**: 0.414 (floor only: non-truth predictions include real duplicates the CRM did not record, so true precision is higher - needs manual spot-checks)
 
+> **Reading the numbers.** The only ground truth available on the laptop is pairs the CRM itself marks
+> as duplicates (`duplicate_of_crm_id` pointer or shared `national_id_hash`). Splink finds 99.7% of those
+> and does not predict any pair that we are *sure* is wrong. The 0.414 "precision" therefore is a floor,
+> not a verdict: the gap between recall (0.997) and precision (0.414) is strong evidence that Splink is
+> finding real duplicates the CRM never flagged (same person, two CRM records opened months apart with
+> no national_id captured on one of them). A fair precision number needs manual review of a spot-check
+> set, which is the right job for the steward queue (`silver.steward_queue`).
+
 ## Coverage by source
 | source      | keys linked / total   | coverage %   | deterministic %   |
 |-------------|-----------------------|--------------|-------------------|
