@@ -2,6 +2,7 @@
 
   python run.py register            # load all source files into DuckDB (raw + typed)
   python run.py profile [--sample N] # reports/profile.md
+  python run.py silver [--sample N]  # cleaned silver.* tables + silver.fix_log
   python run.py ask "question" [--as-of 2026-09-28]
   python run.py bench [--split dev] [--questions extra.csv] [--out submissions/benchmark_answers.csv]
   python run.py eval [--answers submissions/benchmark_answers_dev.csv]
@@ -17,6 +18,8 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("register"); r.add_argument("--no-materialise", action="store_true")
     pr = sub.add_parser("profile"); pr.add_argument("--sample", type=int, default=None)
+    sv = sub.add_parser("silver"); sv.add_argument("--sample", type=int, default=None)
+    sv.add_argument("--tables", nargs="*", default=None, help="subset of tables (default: all)")
     a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--as-of", default=None)
     b = sub.add_parser("bench")
     b.add_argument("--split", default=None); b.add_argument("--questions", default=None)
@@ -34,6 +37,15 @@ def main(argv=None):
         from src.layer1.profile import profile
         con = duckdb.connect(cfg["db_path"], read_only=True)
         print(profile(con, "reports/profile.md", args.sample))
+    elif args.cmd == "silver":
+        import duckdb
+        from tabulate import tabulate
+        from src.layer1.silver import run_silver, fix_log_summary
+        run_silver(cfg, args.sample, args.tables)
+        con = duckdb.connect(cfg["db_path"], read_only=True)
+        rows = [(t, r, f"{n:,}", f"{100 * n / max(i, 1):.2f}%", (b or "")[:40], (a or "")[:40])
+                for t, r, n, i, b, a in fix_log_summary(con)]
+        print(tabulate(rows, headers=["table", "rule", "rows", "% of rows in", "example before", "example after"]))
     elif args.cmd == "ask":
         from src.layer2.qa import QA
         print(json.dumps(QA(cfg).answer(args.question, args.as_of), indent=2, default=str))
