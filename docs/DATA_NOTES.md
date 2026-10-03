@@ -67,7 +67,9 @@ missing data.
   - `'unknown'` in `contact_history.consent_status_at_time` (26,949) and `amd_result` (304,975)
   - `customers.gender_code` `X`/`U` (protected; do not use)
   - `customers.middle_name = 'X'` 1,462: placeholder, treat as null in name matching
-  - `customers.first_name = 'NA'` 15: probably a placeholder
+  - `customers.first_name = 'NA'` 15: **a real given name**, e.g. full_name_raw "Na Fang Yip". Keep it.
+  - `contact_history.treatment_code` uses lower-case canonical values (`outbound_call`). Every other `*_code`
+    column is upper case; `province_code` has variants (`Ont.`, `B.C.`, `Alta.`, `Quebec`, `PQ`, `Man.`, `N.S.`).
 - No numeric sentinels found: the -1/999/9999 checks came back empty. Ranges are sane (age 18–85,
   risk_score 300–850, dpd 0–181, income 9,000–900,000). Missing numbers are real nulls, e.g. income null
   71,428, risk_score null 72,021, card dpd null 52,734.
@@ -111,9 +113,23 @@ missing data.
 - INC-0923 (2026-09-23 08:00 to 09-24 21:00): dialer degraded, call capacity down about 60%. This affects
   contact_history and channel_capacity, so expect a dip in contacts.
 - DFI-0812 (2026-08-12): bureau fixed-width file loaded with a **shifted column for some rows**, about 10,000 in
-  `external`. Not marked in the data, so we have to find it.
+  `external`. Not marked in the data, and not tied to one load: bureau batches arrive monthly on the 16th, and
+  no `file_received_ts` falls on 12 Aug.
+  - **Found by S1:** 9,918 rows have their four inquiry columns rotated one place right
+    (`inquiries_soft_12m`'s value sits in `inquiries_hard_3m`, and so on). The test is
+    `inquiries_hard_3m > inquiries_hard_6m`, which can never be true in clean data.
+  - Average `hard_3m` in flagged rows is 9.96, against 0.42 in clean rows; the soft-inquiry average is 10.01.
+    Every other column has the same distribution as clean rows.
+  - Rotating back makes all 9,918 rows consistent (3m ≤ 6m ≤ 12m). Silver repairs them and keeps the values as
+    loaded in `dfi0812_as_loaded`.
+  - Estimated misses: rotated rows whose true soft count ≤ true hard_3m would not be detected. In clean data
+    that is 745 of 990,082 rows (0.075%), so about 8 rows.
 - POL-0301 (2026-03-01): hardship policy v4.2 (reduced payment 50% for 3 months, evidence rule).
 - ECO-0715 (from 2026-07-15): Windsor-Essex layoffs lead to more job-loss hardship.
+- **`contact_history` content duplicates:** 127,526 pairs of rows are identical in every column except
+  `contact_id`. They are spread over all vendors in proportion to volume (dialer, letter, email, SMS, IVR),
+  so they look like re-sent events. `agent_notes` points to 42,014 of these ids, so silver keeps the referenced
+  copy and lists the removed ones in `silver.contact_history_duplicates`.
 - `contact_history`: 26,864 rows have a `case_id` not in `collections_cases` (1.0%). DC-COLL-001 allows
   orphans < 1%, so this is **just over the limit**.
 - `batch_id` exists on every table, e.g. `CRM_20260928_01`, `CRD_20260828_01` for stale snapshots.
