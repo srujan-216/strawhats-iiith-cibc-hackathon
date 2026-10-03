@@ -16,3 +16,5 @@ python-dotenv>=1.0     # loads .env (API keys) in src/common/config.py
 # splink>=4  pandera>=0.20  lightgbm>=4  shap>=0.45  scikit-learn>=1.4
 # sentence-transformers>=3  faiss-cpu>=1.8  feast>=0.40  streamlit>=1.38
 splink>=5.0        # identity resolution (DuckDB backend); see src/layer1/match.py
+scikit-learn>=1.6     # text TF-IDF + logreg + ridge classifiers (src/layer3/text_classifier.py)
+joblib>=1.3           # trained classifier persistence
