@@ -129,39 +129,48 @@ SELECT s.*,
 
 ACCOUNT_SQL = """
 CREATE OR REPLACE TABLE gold.c360_account AS
--- primary role: xref already resolves owner -> golden_id
-SELECT
-    x.golden_id,
-    x.source_system,
-    x.source_key AS account_id,
-    'primary' AS role,
-    CAST(NULL AS VARCHAR) AS co_holder_crm_id,
-    now() AS refreshed_at
-  FROM silver.id_xref x
- WHERE x.source_system IN ('cards','loans','deposits')
-UNION ALL
--- joint deposit holders (resolved through CRM only if the joint_holder_ref is itself a CIF
--- that maps to another golden_id)
-SELECT xj.golden_id, 'deposits', d.deposit_account_id, 'joint',
-       xj.source_key AS co_holder_crm_id, now()
-  FROM silver.deposit_accounts d
-  JOIN silver.id_xref xd ON xd.source_system='deposits' AND xd.source_key = d.deposit_account_id
-  JOIN silver.id_xref xj ON xj.source_system='deposits' AND xj.source_key IN (
-       SELECT dj.deposit_account_id FROM silver.deposit_accounts dj
-        WHERE dj.src_customer_ref = d.joint_holder_ref)
- WHERE d.joint_account_flag AND d.joint_holder_ref IS NOT NULL
-   AND xj.golden_id <> xd.golden_id
-UNION ALL
--- loan co-borrowers (same bridge trick via loans source refs)
-SELECT xc.golden_id, 'loans', l.loan_id, 'co_borrower',
-       xc.source_key AS co_holder_crm_id, now()
-  FROM silver.loan_accounts l
-  JOIN silver.id_xref xl ON xl.source_system='loans' AND xl.source_key = l.loan_id
-  JOIN silver.id_xref xc ON xc.source_system='loans' AND xc.source_key IN (
-       SELECT lc.loan_id FROM silver.loan_accounts lc
-        WHERE lc.src_customer_ref = l.co_borrower_ref)
- WHERE l.co_borrower_flag AND l.co_borrower_ref IS NOT NULL
-   AND xc.golden_id <> xl.golden_id
+-- Precomputed (src_customer_ref -> account_id) maps so joint/co-borrower lookups become hash
+-- equi-joins. The earlier `WHERE x.source_key IN (SELECT ... WHERE ref = outer_col)` form was a
+-- correlated subquery that DuckDB had to materialise for every outer row (140k x 780k => 171 GB
+-- temp spill, OOM). This CTE pattern is also used wherever c360 needs a src_ref -> id lookup.
+WITH dep_ref_to_acct AS (
+    SELECT src_customer_ref AS ref, deposit_account_id AS account_id
+      FROM silver.deposit_accounts
+     WHERE src_customer_ref IS NOT NULL),
+loan_ref_to_acct AS (
+    SELECT src_customer_ref AS ref, loan_id AS account_id
+      FROM silver.loan_accounts
+     WHERE src_customer_ref IS NOT NULL),
+primary_roles AS (
+    -- xref already resolves owner -> golden_id
+    SELECT x.golden_id, x.source_system, x.source_key AS account_id,
+           'primary' AS role, CAST(NULL AS VARCHAR) AS co_holder_crm_id
+      FROM silver.id_xref x
+     WHERE x.source_system IN ('cards', 'loans', 'deposits')),
+joint_deposits AS (
+    -- joint deposit holder: joint_holder_ref is another holder's src_customer_ref
+    SELECT xj.golden_id, 'deposits' AS source_system, d.deposit_account_id AS account_id,
+           'joint' AS role, xj.source_key AS co_holder_crm_id
+      FROM silver.deposit_accounts d
+      JOIN dep_ref_to_acct h ON h.ref = d.joint_holder_ref
+      JOIN silver.id_xref xd ON xd.source_system = 'deposits' AND xd.source_key = d.deposit_account_id
+      JOIN silver.id_xref xj ON xj.source_system = 'deposits' AND xj.source_key = h.account_id
+     WHERE d.joint_account_flag AND d.joint_holder_ref IS NOT NULL
+       AND xj.golden_id <> xd.golden_id),
+co_borrowers AS (
+    -- loan co-borrower: co_borrower_ref is another borrower's src_customer_ref
+    SELECT xc.golden_id, 'loans' AS source_system, l.loan_id AS account_id,
+           'co_borrower' AS role, xc.source_key AS co_holder_crm_id
+      FROM silver.loan_accounts l
+      JOIN loan_ref_to_acct h ON h.ref = l.co_borrower_ref
+      JOIN silver.id_xref xl ON xl.source_system = 'loans' AND xl.source_key = l.loan_id
+      JOIN silver.id_xref xc ON xc.source_system = 'loans' AND xc.source_key = h.account_id
+     WHERE l.co_borrower_flag AND l.co_borrower_ref IS NOT NULL
+       AND xc.golden_id <> xl.golden_id)
+SELECT golden_id, source_system, account_id, role, co_holder_crm_id, now() AS refreshed_at
+  FROM (SELECT * FROM primary_roles UNION ALL
+        SELECT * FROM joint_deposits UNION ALL
+        SELECT * FROM co_borrowers)
 """
 
 # Account facts: the primary role rows carry the system-of-record fields.
@@ -273,15 +282,17 @@ SELECT golden_id, 'insolvency_flag', 'silver.customers (insolvency_filed_date pr
 # ----- Quality checks Q1-Q7 ---------------------------------------------------------------------
 QUALITY_CHECKS = [
     ("Q1_customer_golden_coverage", """
+        -- LEFT ANTI JOIN (via LEFT JOIN WHERE NULL): hash build on c360_customer, probe id_xref
         SELECT 'c360_customer' AS tbl, count(*) AS records, 0 AS failing,
                'every golden_id in id_xref present in c360_customer' AS rule
-          FROM silver.id_xref WHERE source_system = 'crm'
-           AND golden_id NOT IN (SELECT golden_id FROM gold.c360_customer)"""),
+          FROM silver.id_xref x LEFT JOIN gold.c360_customer c USING (golden_id)
+         WHERE x.source_system = 'crm' AND c.golden_id IS NULL"""),
     ("Q2_account_golden_coverage", """
-        SELECT 'c360_account', count(*),
-               count(*) FILTER (WHERE golden_id NOT IN (SELECT golden_id FROM gold.c360_customer)),
+        SELECT 'c360_account', (SELECT count(*) FROM gold.c360_account),
+               count(*) AS failing,
                'every account.golden_id resolves to a c360_customer'
-          FROM gold.c360_account"""),
+          FROM gold.c360_account a LEFT JOIN gold.c360_customer c USING (golden_id)
+         WHERE c.golden_id IS NULL"""),
     ("Q3_live_account_has_product_and_status", """
         SELECT 'c360_account', count(*) FILTER (WHERE account_status = 'active'),
                count(*) FILTER (WHERE account_status = 'active' AND (product_code IS NULL OR account_status IS NULL)),
