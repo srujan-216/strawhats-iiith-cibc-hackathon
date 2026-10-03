@@ -1,0 +1,310 @@
+{
+    "link_type": "dedupe_only",
+    "probability_two_random_records_match": 0.0001,
+    "retain_matching_columns": false,
+    "retain_intermediate_calculation_columns": false,
+    "additional_columns_to_retain": [],
+    "sql_dialect": "duckdb",
+    "linker_uid": "l661az6a",
+    "em_convergence": 0.0001,
+    "max_iterations": 25,
+    "match_weight_column_prefix": "mw_",
+    "term_frequency_adjustment_column_prefix": "tf_",
+    "comparison_vector_value_column_prefix": "gamma_",
+    "unique_id_column_name": "unique_id",
+    "source_dataset_column_name": "source_dataset",
+    "blocking_rules_to_generate_predictions": [
+        {
+            "blocking_rule": "(l.\"fsa\" = r.\"fsa\") AND (l.\"birth_year\" = r.\"birth_year\")",
+            "sql_dialect": "duckdb"
+        },
+        {
+            "blocking_rule": "l.\"phone10\" = r.\"phone10\"",
+            "sql_dialect": "duckdb"
+        }
+    ],
+    "comparisons": [
+        {
+            "output_column_name": "first_name",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"first_name_l\" IS NULL OR \"first_name_r\" IS NULL",
+                    "label_for_charts": "first_name is NULL",
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\"first_name_l\" = \"first_name_r\"",
+                    "label_for_charts": "Exact match on first_name",
+                    "m_probability": 0.4413840058292426,
+                    "u_probability": 0.0011669918133756121,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "tf_adjustment_column": "first_name",
+                    "tf_adjustment_weight": 1.0
+                },
+                {
+                    "sql_condition": "jaro_winkler_similarity(\"first_name_l\", \"first_name_r\") >= 0.92",
+                    "label_for_charts": "Jaro-Winkler distance of first_name >= 0.92",
+                    "m_probability": 0.011448899557860331,
+                    "u_probability": 0.0007072677656821892,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "jaro_winkler_similarity(\"first_name_l\", \"first_name_r\") >= 0.88",
+                    "label_for_charts": "Jaro-Winkler distance of first_name >= 0.88",
+                    "m_probability": 0.00265476766128588,
+                    "u_probability": 0.0007013738676348376,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "jaro_winkler_similarity(\"first_name_l\", \"first_name_r\") >= 0.7",
+                    "label_for_charts": "Jaro-Winkler distance of first_name >= 0.7",
+                    "m_probability": 0.010694358226517047,
+                    "u_probability": 0.016308415897021814,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "m_probability": 0.5338179687250942,
+                    "u_probability": 0.9811159506562855,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                }
+            ],
+            "comparison_description": "NameComparison"
+        },
+        {
+            "output_column_name": "last_name",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"last_name_l\" IS NULL OR \"last_name_r\" IS NULL",
+                    "label_for_charts": "last_name is NULL",
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\"last_name_l\" = \"last_name_r\"",
+                    "label_for_charts": "Exact match on last_name",
+                    "m_probability": 0.42139580540714666,
+                    "u_probability": 0.000826058845364921,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "tf_adjustment_column": "last_name",
+                    "tf_adjustment_weight": 1.0
+                },
+                {
+                    "sql_condition": "jaro_winkler_similarity(\"last_name_l\", \"last_name_r\") >= 0.92",
+                    "label_for_charts": "Jaro-Winkler distance of last_name >= 0.92",
+                    "m_probability": 0.08201568699569092,
+                    "u_probability": 0.00017601675818957178,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "jaro_winkler_similarity(\"last_name_l\", \"last_name_r\") >= 0.88",
+                    "label_for_charts": "Jaro-Winkler distance of last_name >= 0.88",
+                    "m_probability": 0.0003288176157266703,
+                    "u_probability": 0.0003049795315165848,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "jaro_winkler_similarity(\"last_name_l\", \"last_name_r\") >= 0.7",
+                    "label_for_charts": "Jaro-Winkler distance of last_name >= 0.7",
+                    "m_probability": 0.013054061629624567,
+                    "u_probability": 0.011857604185364816,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "m_probability": 0.9797941359489736,
+                    "u_probability": 0.9868353406795641,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                }
+            ],
+            "comparison_description": "NameComparison"
+        },
+        {
+            "output_column_name": "dob",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"dob_l\" IS NULL OR \"dob_r\" IS NULL",
+                    "label_for_charts": "dob is NULL",
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\"dob_l\" = \"dob_r\"",
+                    "label_for_charts": "Exact match on date of birth",
+                    "m_probability": 0.48844781247611,
+                    "u_probability": 5.484683513447631e-05,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "levenshtein(CAST(\"dob_l\" AS TEXT), CAST(\"dob_r\" AS TEXT)) <= 1",
+                    "label_for_charts": "Levenshtein distance <= 1",
+                    "m_probability": 0.04874723520525686,
+                    "u_probability": 0.001516413423255058,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "ABS(EPOCH(\"dob_l\") - EPOCH(\"dob_r\")) <= 2629800.0",
+                    "label_for_charts": "Abs date difference <= 1 month",
+                    "m_probability": 0.12694021221338497,
+                    "u_probability": 0.0025615503372064677,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "ABS(EPOCH(\"dob_l\") - EPOCH(\"dob_r\")) <= 31557600.0",
+                    "label_for_charts": "Abs date difference <= 1 year",
+                    "m_probability": 0.41037513278296994,
+                    "u_probability": 0.034780511091248884,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "ABS(EPOCH(\"dob_l\") - EPOCH(\"dob_r\")) <= 315576000.0",
+                    "label_for_charts": "Abs date difference <= 10 year",
+                    "m_probability": 0.017777775472033616,
+                    "u_probability": 0.32344295929146016,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "m_probability": 0.008888886591164545,
+                    "u_probability": 0.6376437190216949,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                }
+            ],
+            "comparison_description": "DateOfBirthComparison"
+        },
+        {
+            "output_column_name": "phone10",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"phone10_l\" IS NULL OR \"phone10_r\" IS NULL",
+                    "label_for_charts": "phone10 is NULL",
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\"phone10_l\" = \"phone10_r\"",
+                    "label_for_charts": "Exact match on phone10",
+                    "m_probability": 0.003608407012037155,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "tf_adjustment_column": "phone10",
+                    "tf_adjustment_weight": 1.0
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "m_probability": 0.9963915929879628,
+                    "u_probability": 1.0,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                }
+            ],
+            "comparison_description": "ExactMatch"
+        },
+        {
+            "output_column_name": "fsa",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"fsa_l\" IS NULL OR \"fsa_r\" IS NULL",
+                    "label_for_charts": "fsa is NULL",
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\"fsa_l\" = \"fsa_r\"",
+                    "label_for_charts": "Exact match on fsa",
+                    "m_probability": 1.0,
+                    "u_probability": 0.002539674969297357,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "u_probability": 0.9974603250307026,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                }
+            ],
+            "comparison_description": "ExactMatch"
+        },
+        {
+            "output_column_name": "email",
+            "comparison_levels": [
+                {
+                    "sql_condition": "\"email_l\" IS NULL OR \"email_r\" IS NULL",
+                    "label_for_charts": "email is NULL",
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "is_null_level": true
+                },
+                {
+                    "sql_condition": "\"email_l\" = \"email_r\"",
+                    "label_for_charts": "Exact match on email",
+                    "m_probability": 0.2623496754664054,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false,
+                    "tf_adjustment_column": "email",
+                    "tf_adjustment_weight": 1.0
+                },
+                {
+                    "sql_condition": "NULLIF(regexp_extract(\"email_l\", '^[^@]+', 0), '') = NULLIF(regexp_extract(\"email_r\", '^[^@]+', 0), '')",
+                    "label_for_charts": "Exact match on username",
+                    "u_probability": 1.7240933424135583e-06,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "jaro_winkler_similarity(\"email_l\", \"email_r\") >= 0.88",
+                    "label_for_charts": "Jaro-Winkler distance of email >= 0.88",
+                    "m_probability": 0.005258701187243325,
+                    "u_probability": 0.0005948122031326776,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "jaro_winkler_similarity(NULLIF(regexp_extract(\"email_l\", '^[^@]+', 0), ''), NULLIF(regexp_extract(\"email_r\", '^[^@]+', 0), '')) >= 0.88",
+                    "label_for_charts": "Jaro-Winkler >0.88 on username",
+                    "m_probability": 7.427372883443884e-05,
+                    "u_probability": 3.448186684827117e-05,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                },
+                {
+                    "sql_condition": "ELSE",
+                    "label_for_charts": "All other comparisons",
+                    "m_probability": 0.732354486481934,
+                    "u_probability": 0.9993689818366767,
+                    "fix_m_probability": false,
+                    "fix_u_probability": false
+                }
+            ],
+            "comparison_description": "EmailComparison"
+        }
+    ]
+}
