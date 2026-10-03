@@ -40,12 +40,13 @@ def main(argv=None):
     elif args.cmd == "silver":
         import duckdb
         from tabulate import tabulate
-        from src.layer1.silver import run_silver, fix_log_summary
+        from src.layer1.silver import run_silver, fix_log_summary, write_fix_log_report
         run_silver(cfg, args.sample, args.tables)
         con = duckdb.connect(cfg["db_path"], read_only=True)
         rows = [(t, r, f"{n:,}", f"{100 * n / max(i, 1):.2f}%", (b or "")[:40], (a or "")[:40])
                 for t, r, n, i, b, a in fix_log_summary(con)]
         print(tabulate(rows, headers=["table", "rule", "rows", "% of rows in", "example before", "example after"]))
+        print(write_fix_log_report(con))
     elif args.cmd == "ask":
         from src.layer2.qa import QA
         print(json.dumps(QA(cfg).answer(args.question, args.as_of), indent=2, default=str))
