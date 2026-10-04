@@ -30,7 +30,8 @@ edit / reject with a reason code.
 
 ![Architecture](docs/architecture.png)
 
-The diagram above is our Phase 1 submitted design, drawn by hand (not AI-generated).
+The diagram above is page 1 of our Phase 1 submitted design, drawn in TikZ/LaTeX by hand (not
+AI-generated). The full 6-page design is `docs/StrawHats_SystemDesign.pdf`.
 
 ## How to run
 
@@ -99,8 +100,8 @@ agent accept / edit with a reason code, and the fairness + audit report.
 
 ## What changed from our Phase 1 design
 
-Technical/architecture decisions revised during the build. Reasons are in the model card and
-reports:
+Baseline: `docs/StrawHats_SystemDesign.pdf` (the design we submitted in Phase 1). The build
+revised the following technical/architecture decisions; reasons are in the model card and reports:
 
 - **Text features — trained classifier instead of LLM at inference.** TF-IDF (word + char n-grams)
   + logistic regression on the 500 public note labels and 500 transcript labels; macro F1 0.97 on
@@ -144,9 +145,8 @@ contracts/         c360_customer.yaml (data contract based on DC-COLL-001)
 reports/           DQ, match, model card, feature + text-feature evals, fairness, L2 changelog
 tests/             90 tests covering guard, policy gate, parity, grounding, no-protected-features
 submission/        benchmark_answers.csv — our benchmark output (generated; never hand-edited)
-docs/              architecture.png, screenshots, DATA_NOTES
+docs/              architecture.png, Phase 1 design PDF, data-quality notes, screenshots
 models/            trained classifiers (splink, nba, text); small, no PII
-scripts/           pdf_to_png (convert design PDF to the architecture PNG)
 run.py             one entry point for every pipeline stage
 config.yaml        data_dir, DuckDB path, LLM providers, memory limits
 ```
