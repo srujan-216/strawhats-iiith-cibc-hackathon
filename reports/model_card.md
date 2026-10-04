@@ -44,3 +44,8 @@
 - The randomisation check (`reports/randomisation_check.md`) confirms the champion / no_contact_holdout contrast is clean (worst |SMD| = 0.033).
 - Pure 30-day-cure uplift is small (no_contact baseline 71.5%); `decision_value` with `action_cost=0` for no_contact is why the system still saves money - it stops dialling customers who were going to self-cure.
 - `action_cost` values are illustrative; a cost study should replace them before prod.
+
+## Fairness
+
+Report: `reports/fairness_report.md`. Measured on 5 protected attributes using the method in src/governance/fairness.py (5pp fairness band on predicted cure).
+**All groups fall within the 5pp band on predicted cure.** No live recommendation is changed by fairness; the module is report-only (see CLAUDE.md §2).

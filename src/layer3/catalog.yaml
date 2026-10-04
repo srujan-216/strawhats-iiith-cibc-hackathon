@@ -256,7 +256,7 @@ features:
   - name: txt_dispute_mention
     type: boolean
     sources: [agent_notes.note_text, call_transcripts (JSON)]
-    recipe: regex match on 'dispute|charge|refund|not auth|cash?back' (bilingual: 'contest|frais|rembours') AND NOT 'no dispute'
+    recipe: "regex match on 'dispute|charge|refund|not auth|cash?back' (bilingual 'contest|frais|rembours') AND NOT 'no dispute'"
     refresh: on text ingest
     model: regex rule (label too sparse to classify - 8 notes true)
     why: structured dispute_flag misses customer verbal mentions; useful alongside c360_case.dispute_flag

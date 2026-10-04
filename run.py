@@ -36,6 +36,7 @@ def main(argv=None):
     sub.add_parser("score")                # batch-score all open cases -> gold.nba_recommendations
     sc = sub.add_parser("score-case"); sc.add_argument("case_id")
     sub.add_parser("app")                  # launch Streamlit Agent Desk
+    sub.add_parser("fairness")             # reports/fairness_report.md + model card append
     al = sub.add_parser("all")
     al.add_argument("--sample", type=int, default=None, help="pass to each stage (optional)")
     a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--as-of", default=None)
@@ -99,6 +100,11 @@ def main(argv=None):
         import subprocess
         subprocess.run([sys.executable, "-m", "streamlit", "run", "app/streamlit_app.py",
                         "--server.headless=true"])
+    elif args.cmd == "fairness":
+        from src.governance.fairness import write_report, append_to_model_card
+        verdicts = write_report(cfg)
+        append_to_model_card(verdicts)
+        print(json.dumps(verdicts, indent=2))
     elif args.cmd == "all":
         import time
         from src.layer1.register import register_all
