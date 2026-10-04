@@ -30,8 +30,9 @@ edit / reject with a reason code.
 
 ![Architecture](docs/architecture.png)
 
-The diagram above is page 1 of our Phase 1 submitted design, drawn in TikZ/LaTeX by hand (not
-AI-generated). The full 6-page design is `docs/StrawHats_SystemDesign.pdf`.
+Shipped architecture (page 1). Hand-drawn in TikZ/LaTeX, not AI-generated. The Phase 1 design is
+in `docs/StrawHats_SystemDesign.pdf` and the detailed list of changes is in the "What changed from
+our Phase 1 design" section below.
 
 ## How to run
 
@@ -147,7 +148,7 @@ contracts/         c360_customer.yaml (data contract based on DC-COLL-001)
 reports/           DQ, match, model card, feature + text-feature evals, fairness, L2 changelog
 tests/             90 tests covering guard, policy gate, parity, grounding, no-protected-features
 submission/        benchmark_answers.csv — our benchmark output (generated; never hand-edited)
-docs/              architecture.png, Phase 1 design PDF, data-quality notes, screenshots
+docs/              architecture.png/.pdf/.tex (shipped), Phase 1 design PDF, data-quality notes, screenshots
 models/            trained classifiers (splink, nba, text); small, no PII
 run.py             one entry point for every pipeline stage
 config.yaml        data_dir, DuckDB path, LLM providers, memory limits
