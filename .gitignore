@@ -1,15 +1,30 @@
-warehouse/
-logs/
+# Secrets & environment
+.env
+.env.*
+!.env.example
+
+# Build / caches
 __pycache__/
 *.pyc
-.env
-maple_data/
-*.duckdb
-*.pkl
-submission/*_dev.csv
+.pytest_cache/
+.ipynb_checkpoints/
 .venv/
+
+# Data (never committed; rebuilt by run.py)
+maple_data/
+warehouse/
+logs/
+decisions*
+*.duckdb
+*.duckdb.wal
+*.pkl
+*llm_cache*.sqlite
+
+# Dev-only docs (local-only; not part of submission)
+CLAUDE.md
+docs/demo_script.md
+
+# Submission intermediates (keep only submission/benchmark_answers.csv)
+submission/*_dev.csv
 submission/*_dev_*.csv
 submission/*.timing.csv
-
-warehouse/
-decisions*
