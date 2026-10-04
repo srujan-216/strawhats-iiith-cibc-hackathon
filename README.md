@@ -132,8 +132,6 @@ sit alongside the metrics in the reports.
 - **Runtime (in the deployed system):** Google Gemini (free tier) and Groq (free tier) through our
   OpenAI-compatible gateway. Models in use: `gemini-3.5-flash`, `openai/gpt-oss-20b` with
   model-level fallbacks. No paid LLM APIs are used at runtime.
-- **Build-time (pair-programming during development):** Claude (Anthropic) via Claude Code and
-  Claude chat. Every suggestion was reviewed, tested, and committed by the team.
 
 ## Repo layout
 
