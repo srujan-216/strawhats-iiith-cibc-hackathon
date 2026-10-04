@@ -161,40 +161,64 @@ class LLM:
         self._last_call[p["name"]] = time.time()
 
     def _call(self, p: dict, system: str, user: str, purpose: str = "") -> str:
+        """One provider call. If 429 and the provider lists `fallback_models`, retry the same provider
+        on each fallback model in turn before cooling the provider down and raising."""
         import requests
         self._pace(p)
         headers = {"Content-Type": "application/json"}
         if p.get("api_key_env"):
             headers["Authorization"] = f"Bearer {os.environ[p['api_key_env']]}"
-        body = {"model": p["model"], "temperature": self.c.get("temperature", 0),
-                "max_tokens": self.c.get("max_tokens", 1500),
-                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
         effort = self._effort(p, purpose)
-        if effort:   # only providers configured with reasoning_effort get the field
-            body["reasoning_effort"] = effort
         url = p["base_url"].rstrip("/") + "/chat/completions"
-        for attempt in (1, 2):
-            try:
-                r = requests.post(url, headers=headers, json=body, timeout=p.get("timeout_s", 120))
-            except requests.RequestException as e:
-                self._cooldown_until[p["name"]] = time.time() + 30
-                raise ProviderUnavailable(f"network: {str(e)[:120]}", None, 30)
-            if r.status_code == 503 and attempt == 1:   # overloaded: often clears in seconds
-                if self.audit:
-                    self.audit.write("llm_provider_failed", route=self.route, provider=p["name"],
-                                     http_status=503, error="overloaded; retrying once", cooldown_s=0)
-                time.sleep(RETRY_503_AFTER_S)
-                continue
-            break
-        if r.status_code == 429 or r.status_code >= 500 or "quota" in r.text[:500].lower():
-            retry = min(float(r.headers.get("retry-after", 60) or 60), 600)
-            self._cooldown_until[p["name"]] = time.time() + retry
-            raise ProviderUnavailable(f"HTTP {r.status_code}: {_short(r.text)} (cool-down {retry:.0f}s)",
-                                      r.status_code, retry)
-        if r.status_code >= 400:
-            raise ProviderUnavailable(f"HTTP {r.status_code}: {_short(r.text)}", r.status_code, 0)
-        data = r.json()
-        return data["choices"][0]["message"]["content"] or ""
+        models = [p["model"], *p.get("fallback_models", [])]
+        last_err = None
+        for mi, model in enumerate(models):
+            body = {"model": model, "temperature": self.c.get("temperature", 0),
+                    "max_tokens": self.c.get("max_tokens", 1500),
+                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+            if effort:
+                body["reasoning_effort"] = effort
+            for attempt in (1, 2):   # 503 retry on the same model
+                try:
+                    r = requests.post(url, headers=headers, json=body, timeout=p.get("timeout_s", 120))
+                except requests.RequestException as e:
+                    self._cooldown_until[p["name"]] = time.time() + 30
+                    raise ProviderUnavailable(f"network: {str(e)[:120]}", None, 30)
+                if r.status_code == 503 and attempt == 1:
+                    if self.audit:
+                        self.audit.write("llm_provider_failed", route=self.route, provider=p["name"],
+                                         http_status=503, error=f"overloaded on {model}; retrying once",
+                                         cooldown_s=0)
+                    time.sleep(RETRY_503_AFTER_S)
+                    continue
+                break
+            # Fallback triggers: 429 (quota), 5xx (server problem), 404 (model retired/renamed),
+            # or body says "quota". For any of these, try the next model in the chain before
+            # cooling the whole provider down.
+            retryable = (r.status_code == 429 or r.status_code == 404 or r.status_code >= 500
+                         or "quota" in r.text[:500].lower())
+            if retryable:
+                retry = min(float(r.headers.get("retry-after", 60) or 60), 600)
+                last_err = ProviderUnavailable(
+                    f"HTTP {r.status_code} on {model}: {_short(r.text)} (cool-down {retry:.0f}s)",
+                    r.status_code, retry)
+                if mi < len(models) - 1:
+                    if self.audit:
+                        self.audit.write("llm_provider_failed", route=self.route, provider=p["name"],
+                                         http_status=r.status_code, error=f"{model}; falling back",
+                                         cooldown_s=0)
+                    continue
+                # 404 means the final fallback model is invalid: don't put the provider on a long
+                # cool-down for that (nothing will fix it); 429/5xx deserve the usual cool-down
+                if r.status_code == 404:
+                    raise last_err
+                self._cooldown_until[p["name"]] = time.time() + retry
+                raise last_err
+            if r.status_code >= 400:
+                raise ProviderUnavailable(f"HTTP {r.status_code} on {model}: {_short(r.text)}", r.status_code, 0)
+            data = r.json()
+            return data["choices"][0]["message"]["content"] or ""
+        raise last_err or ProviderUnavailable("unknown error", None, 0)
 
     def _audit(self, purpose, provider, latency, pchars, ochars, cached=False):
         if self.audit:
