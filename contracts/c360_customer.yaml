@@ -4,7 +4,12 @@ version: 1.0
 effective_date: 2026-10-03
 owner:
   team: Collections Data Office (team Straw Hats)
-  tech_contact: snchakrimakkarajpet@gmail.com
+  members:
+    - Kondameedi Srujan Raj
+    - D Varshith Reddy
+    - G Swachatha
+    - T Sreenidhi
+  repo: https://github.com/srujan-216/strawhats-iiith-cibc-hackathon
 refresh:
   frequency: daily
   target_time: "05:00 ET"
