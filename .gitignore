@@ -10,3 +10,6 @@ submissions/*_dev.csv
 .venv/
 submissions/*_dev_*.csv
 submissions/*.timing.csv
+
+warehouse/
+decisions*
