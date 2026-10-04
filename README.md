@@ -34,6 +34,28 @@ Shipped architecture (page 1). Hand-drawn in TikZ/LaTeX, not AI-generated. The P
 in `docs/StrawHats_SystemDesign.pdf` and the detailed list of changes is in the "What changed from
 our Phase 1 design" section below.
 
+## API keys (free, required)
+
+The system uses two free LLM providers through our gateway. You need both for the
+full Q&A path; the gateway falls back cleanly if one is unavailable.
+
+1. **Google Gemini API** (free tier)
+   - Get a key at https://aistudio.google.com → "Get API key"
+   - Free tier: ~50 requests/day on gemini-3.5-flash
+
+2. **Groq API** (free tier)
+   - Get a key at https://console.groq.com/keys → "Create API Key"
+   - Free tier: 30 requests/minute, generous daily quota
+
+Create a `.env` file at the repo root:
+
+```
+GEMINI_API_KEY=AIza...
+GROQ_API_KEY=gsk_...
+```
+
+The gateway skips any provider whose key is unset, so you can start with just one if you need to.
+
 ## How to run
 
 Prerequisites: Python 3.10+, Git, ~12 GB free disk for the unpacked dataset.
@@ -50,10 +72,7 @@ python -m venv .venv
 # Windows:  .venv\Scripts\activate         Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 
-# 3. Free-tier LLM keys (both free; the gateway skips providers with no key)
-# Create a .env file in the repo root:
-#   GEMINI_API_KEY=...        # from https://aistudio.google.com
-#   GROQ_API_KEY=...          # from https://console.groq.com
+# 3. Free-tier LLM keys (see "API keys" section below for how to get them)
 
 # 4. Build the warehouse end-to-end
 python run.py all             # register -> silver -> match -> c360 -> dq-report
