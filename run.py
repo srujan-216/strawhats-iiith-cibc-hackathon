@@ -8,8 +8,8 @@
   python run.py dq-report            # reports/data_quality_report.md
   python run.py all    [--sample N]  # register -> silver -> match -> c360 -> dq-report
   python run.py ask "question" [--as-of 2026-09-28]
-  python run.py bench [--split dev] [--questions extra.csv] [--out submissions/benchmark_answers.csv]
-  python run.py eval [--answers submissions/benchmark_answers_dev.csv]
+  python run.py bench [--split dev] [--questions extra.csv] [--out submission/benchmark_answers.csv]
+  python run.py eval [--answers submission/benchmark_answers_dev.csv]
 """
 from __future__ import annotations
 import argparse, json, sys
@@ -42,11 +42,11 @@ def main(argv=None):
     a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--as-of", default=None)
     b = sub.add_parser("bench")
     b.add_argument("--split", default=None); b.add_argument("--questions", default=None)
-    b.add_argument("--out", default="submissions/benchmark_answers.csv"); b.add_argument("--limit", type=int)
+    b.add_argument("--out", default="submission/benchmark_answers.csv"); b.add_argument("--limit", type=int)
     b.add_argument("--fresh", action="store_true", help="ignore existing rows in --out")
     b.add_argument("--pace-seconds", type=float, default=0.0,
                    help="sleep N seconds between questions (default 0; use 5 for the 19:00 extras run)")
-    e = sub.add_parser("eval"); e.add_argument("--answers", default="submissions/benchmark_answers_dev.csv")
+    e = sub.add_parser("eval"); e.add_argument("--answers", default="submission/benchmark_answers_dev.csv")
     args = p.parse_args(argv)
     cfg = load_config(args.config)
 

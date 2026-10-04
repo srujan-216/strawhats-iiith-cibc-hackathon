@@ -2,7 +2,7 @@
 
   python -m src.layer2.compare            # configs A, B, C (see CONFIGS)
 
-Each config gets its own output CSV (submissions/benchmark_answers_dev_<name>.csv, git-ignored), is run
+Each config gets its own output CSV (submission/benchmark_answers_dev_<name>.csv, git-ignored), is run
 with a fresh start, and is scored by evaluate.py. Provider mix comes from the audit log lines written
 during the run (cached calls are counted separately)."""
 from __future__ import annotations
@@ -31,7 +31,7 @@ def run_config(base: dict, name: str, model, effort, log=print) -> dict:
     if model:
         g["model"] = model
     g["reasoning_effort"] = effort
-    out = f"submissions/benchmark_answers_dev_{name}.csv"
+    out = f"submission/benchmark_answers_dev_{name}.csv"
     audit = Path(cfg["audit_log"])
     offset = audit.stat().st_size if audit.exists() else 0
     t0 = time.time()

@@ -72,7 +72,7 @@ Screenshots: `python scripts/make_screenshots.py` (uses Playwright).
 | `score-case <case_id>` | — | sub-second lookup used by the Agent Desk |
 | `fairness` | `reports/fairness_report.md` + append to `model_card.md` | protected-attribute gaps; the only module that reads them |
 | `ask "<question>"` | — | free-form Q&A with SQL/sources shown |
-| `bench [--split dev] [--out ...]` | `submissions/benchmark_answers*.csv` | run the system on the benchmark; never hand-edited |
+| `bench [--split dev] [--out ...]` | `submission/benchmark_answers*.csv` | run the system on the benchmark; never hand-edited |
 | `eval --answers ...` | `reports/benchmark_dev_eval.md` | dev-split scoring (gold answers only read here) |
 | `app` | — | Streamlit Agent Desk on port 8501 |
 
@@ -144,7 +144,7 @@ contracts/          c360_customer.yaml (data contract based on DC-COLL-001)
 reports/            generated: profile, DQ, match, model card, fairness, feature report, text eval
 docs/               DATA_NOTES, demo_script, SOLO_PROMPTS, architecture.png
 models/             splink_settings.json, nba/*.joblib, text/*.joblib
-submissions/        benchmark_answers.csv (generated; never hand-edited)
+submission/        benchmark_answers.csv (generated; never hand-edited)
 warehouse/          maple.duckdb + decisions.parquet (ignored by git)
 ```
 
