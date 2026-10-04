@@ -34,16 +34,12 @@ Target used here is a proxy: `cured` = any of the customer's collections cases c
 
 (no numeric pair above threshold - no pruning needed)
 
-## Kept list (20 of 23 features)
+## Kept list (23 of 23 features)
 
-dpd_level, worst_dpd_12m, dpd_slope_3m, balance_at_risk, broken_promises_90d, promise_due_vs_payday_gap_days, payroll_delay_days, nsf_count_3m, cash_flow_slope_6m, bureau_present, bureau_delta_90d, contacts_last_7d, best_time_band_hour, txt_hardship_signal, txt_delay_reason, txt_ptp_mentioned, txt_ptp_intent_strength, txt_sentiment, vulnerability_signal, txt_dispute_mention
+dpd_level, worst_dpd_12m, dpd_slope_3m, utilisation_trend_6m, balance_at_risk, broken_promises_90d, promise_due_vs_payday_gap_days, payroll_delay_days, salary_change_3m_pct, nsf_count_3m, cash_flow_slope_6m, bureau_present, bureau_delta_90d, contacts_last_7d, answer_rate_30d, best_time_band_hour, txt_hardship_signal, txt_delay_reason, txt_ptp_mentioned, txt_ptp_intent_strength, txt_sentiment, vulnerability_signal, txt_dispute_mention
 
 ## Dropped
-| feature              |   coverage_pct |   corr_cured |
-|----------------------|----------------|--------------|
-| utilisation_trend_6m |           48.8 |        0.005 |
-| salary_change_3m_pct |           23.5 |       -0.003 |
-| answer_rate_30d      |            4.9 |       -0.004 |
+(none - all features kept)
 
 ## Notes
 - IV / PSI left to a point-in-time build with a real target; the proxy here is biased by the order of case opens.

@@ -66,8 +66,11 @@ def build_report(cfg: dict, out: str = "reports/feature_report.md") -> str:
           "## Pairwise correlation prune (|r| > 0.9)", ""]
     md.append(tabulate(high, headers=["feature_a", "feature_b", "r"], tablefmt="github") if high
               else "(no numeric pair above threshold - no pruning needed)")
-    kept = [r["feature"] for r in rows if (abs(r["corr_cured"] or 0) > 0.005 or r["coverage_pct"] > 50)]
-    dropped = [r for r in rows if r["feature"] not in kept]
+    # P6 (uplift model) is the real selector via SHAP + uplift importance. The proxy here biases
+    # against low-coverage behavioural features that only move once a case opens, so we keep all
+    # features in the store and let the trained model prune.
+    kept = [r["feature"] for r in rows]
+    dropped = []
     md += ["", f"## Kept list ({len(kept)} of {len(rows)} features)", "",
            ", ".join(kept),
            "", "## Dropped",

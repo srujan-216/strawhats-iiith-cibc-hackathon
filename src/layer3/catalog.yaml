@@ -58,6 +58,7 @@ features:
     recipe: avg(utilisation) now (snapshot_date) minus avg(utilisation) 6 months ago on card accounts
     refresh: daily
     why: rising utilisation precedes delinquency on cards
+    note_low_proxy_signal: "low correlation with the any-cured proxy; retain for P6 training; the real target (cured within 30 days of decision) will decide via SHAP + uplift importance"
     nullable: true
     version: 1
 
@@ -108,6 +109,7 @@ features:
     recipe: payroll_amount_change_pct from the customer's primary deposit account
     refresh: daily
     why: direction of salary matters for payment capacity
+    note_low_proxy_signal: "low correlation with the any-cured proxy; retain for P6 training"
     nullable: true
     version: 1
 
@@ -170,6 +172,7 @@ features:
       RPC set = outcome codes with attributes_json counts_as_rpc = true
     refresh: daily
     why: picks the dial-vs-digital decision; also used by best_time_band computation
+    note_low_proxy_signal: "low correlation with the any-cured proxy; retain for P6 training; the proxy misses the decision-point split"
     nullable: true     # customers never called have no rate
     version: 1
 
