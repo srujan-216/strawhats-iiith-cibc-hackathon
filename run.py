@@ -35,6 +35,7 @@ def main(argv=None):
     sub.add_parser("train")                # fit 6 LightGBM NBA classifiers
     sub.add_parser("score")                # batch-score all open cases -> gold.nba_recommendations
     sc = sub.add_parser("score-case"); sc.add_argument("case_id")
+    sub.add_parser("app")                  # launch Streamlit Agent Desk
     al = sub.add_parser("all")
     al.add_argument("--sample", type=int, default=None, help="pass to each stage (optional)")
     a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--as-of", default=None)
@@ -94,6 +95,10 @@ def main(argv=None):
     elif args.cmd == "score-case":
         from src.layer4.nba import score_case
         print(json.dumps(score_case(cfg, args.case_id), indent=2, default=str))
+    elif args.cmd == "app":
+        import subprocess
+        subprocess.run([sys.executable, "-m", "streamlit", "run", "app/streamlit_app.py",
+                        "--server.headless=true"])
     elif args.cmd == "all":
         import time
         from src.layer1.register import register_all
