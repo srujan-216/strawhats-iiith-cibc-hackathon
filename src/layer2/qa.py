@@ -4,13 +4,16 @@ Flow: rule scope check -> LLM plan (sql | text_sql | docs | refuse) -> SQL guard
 execute (read-only, timeout) -> retry on error -> LLM writes the answer from the result only.
 Every step is written to the audit log."""
 from __future__ import annotations
-import re
+import json, re
 import duckdb
 from src.common.audit import AuditLog
 from src.layer2.catalog import Catalog
 from src.layer2.guard import GuardError, execute_guarded, validate
 from src.layer2.llm import LLM
 from src.layer2.rag_docs import DocIndex
+
+
+JSON_RETRY_SUFFIX = ("\n\nReturn VALID JSON. The previous response was truncated or malformed.")
 
 DEFAULT_AS_OF = "2026-09-28"
 
@@ -149,8 +152,17 @@ class QA:
             self.audit.write("answer_empty", question=question, sql=sql)
             return res
         rows = df.head(40).to_csv(index=False)
-        final = self.llm.complete_json(ANSWER_SYSTEM, f"QUESTION: {question}\nSQL:\n{sql}\nRESULT ({len(df)} rows):\n{rows}",
-                                       purpose="answer")
+        answer_user = f"QUESTION: {question}\nSQL:\n{sql}\nRESULT ({len(df)} rows):\n{rows}"
+        try:
+            final = self.llm.complete_json(ANSWER_SYSTEM, answer_user, purpose="answer")
+        except json.JSONDecodeError:
+            # one retry with an explicit "return valid JSON" nudge before giving up
+            self.audit.write("json_parse_retry", question=question, purpose="answer")
+            try:
+                final = self.llm.complete_json(ANSWER_SYSTEM, answer_user + JSON_RETRY_SUFFIX, purpose="answer")
+            except json.JSONDecodeError as e:
+                return self._refuse(res, f"the language model returned malformed JSON twice: {str(e)[:120]}",
+                                    "json_parse")
         res.update(answer=final.get("answer", ""), sql_or_sources=sql, reasoning=final.get("reasoning", ""))
         self.audit.write("answer", question=question, sql=sql, rows=len(df), answer=res["answer"])
         return res
@@ -160,7 +172,16 @@ class QA:
         if not hits:
             return self._refuse(res, "no current policy covers this", "retrieval")
         ctx = "\n\n".join(f"[{h['doc_id']} v{h['version']} s:{h['section']}]\n{h['text'][:1500]}" for h in hits)
-        final = self.llm.complete_json(ANSWER_SYSTEM, f"QUESTION: {question}\nDOCUMENTS:\n{ctx}", purpose="answer_docs")
+        docs_user = f"QUESTION: {question}\nDOCUMENTS:\n{ctx}"
+        try:
+            final = self.llm.complete_json(ANSWER_SYSTEM, docs_user, purpose="answer_docs")
+        except json.JSONDecodeError:
+            self.audit.write("json_parse_retry", question=question, purpose="answer_docs")
+            try:
+                final = self.llm.complete_json(ANSWER_SYSTEM, docs_user + JSON_RETRY_SUFFIX, purpose="answer_docs")
+            except json.JSONDecodeError as e:
+                return self._refuse(res, f"the language model returned malformed JSON twice: {str(e)[:120]}",
+                                    "json_parse")
         sources = "; ".join(dict.fromkeys(f"{h['doc_id']} v{h['version']} ({h['section']})" for h in hits))
         res.update(answer=final.get("answer", ""), sql_or_sources=sources, reasoning=final.get("reasoning", ""))
         self.audit.write("answer", question=question, sources=sources, answer=res["answer"])

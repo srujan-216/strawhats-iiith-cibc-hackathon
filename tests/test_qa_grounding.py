@@ -109,3 +109,42 @@ def test_certified_vs_exploratory_badge(tmp_path, metric_id, want):
     duckdb.connect(cfg["db_path"]).execute("INSERT INTO main.customers VALUES ('A-1')").close()
     r = QA(cfg, llm=LLM(cfg, mock=mock)).answer("How many customers?")
     assert not r["refused"] and r["badge"] == want
+
+
+def test_json_parse_retry_once_then_succeeds(tmp_path):
+    """If the answer-step LLM returns malformed JSON, QA retries ONCE with a 'return valid JSON'
+    suffix. If that works, the final answer is clean. Audit shows one retry event."""
+    calls = []
+    def mock(system, user):
+        calls.append(user)
+        if "query planner" in system:
+            return '{"action": "sql", "sql": "SELECT crm_customer_id FROM customers"}'
+        if "Return VALID JSON" in user or "truncated or malformed" in user:
+            return '{"answer": "1", "reasoning": "one row"}'
+        return '{"answer": "0", "reasoning"'   # malformed on first try
+    cfg = _cfg(tmp_path)
+    duckdb.connect(cfg["db_path"]).execute("INSERT INTO main.customers VALUES ('A-1')").close()
+    r = QA(cfg, llm=LLM(cfg, mock=mock)).answer("How many customers?")
+    assert not r["refused"]
+    assert r["answer"] == "1" and r["reasoning"] == "one row"
+    # answer prompt was sent twice: original, then with JSON_RETRY_SUFFIX
+    answer_calls = [c for c in calls if "QUESTION:" in c and "SQL:" in c]
+    assert len(answer_calls) == 2
+    assert "Return VALID JSON" in answer_calls[1] or "truncated or malformed" in answer_calls[1]
+    # audit records the retry
+    with open(cfg["audit_log"]) as f:
+        events = [json.loads(l) for l in f if l.strip()]
+    assert any(e["event"] == "json_parse_retry" for e in events)
+
+
+def test_json_parse_retry_both_fail_refuses(tmp_path):
+    """When both the first and the retry return malformed JSON, QA refuses (does not ship a guess)."""
+    def mock(system, user):
+        if "query planner" in system:
+            return '{"action": "sql", "sql": "SELECT crm_customer_id FROM customers"}'
+        return '{"answer":'    # malformed on both attempts
+    cfg = _cfg(tmp_path)
+    duckdb.connect(cfg["db_path"]).execute("INSERT INTO main.customers VALUES ('A-1')").close()
+    r = QA(cfg, llm=LLM(cfg, mock=mock)).answer("How many customers?")
+    assert r["refused"]
+    assert "malformed JSON" in r["answer"]
