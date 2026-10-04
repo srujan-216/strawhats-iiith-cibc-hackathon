@@ -9,14 +9,7 @@ with automatic failover and caching.
 
 ## Team
 
-- **Kondameedi Srujan Raj** — Layer 1 (register / silver / match / C360 / data contract),
-  Layer 2 (free-LLM gateway, SQL guard, Q&A, benchmark runner), Layer 3 (feature store, text classifier),
-  Layer 4 (NBA T-learner, policy gate, SHAP explanations), governance / fairness,
-  Agent Desk (Streamlit), submission.
-- **D Varshith Reddy** — Layer 3/4 heavy runs, feature engineering review, model-card review,
-  Agent Desk feedback.
-- **G Swachatha** — Data quality review, DC-COLL-001 contract alignment, demo preparation.
-- **T Sreenidhi** — Benchmark question analysis, Layer 2 refusal review, submission validation.
+Kondameedi Srujan Raj  ·  D Varshith Reddy  ·  G Swachatha  ·  T Sreenidhi
 
 ## How to run
 
