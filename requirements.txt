@@ -18,3 +18,5 @@ python-dotenv>=1.0     # loads .env (API keys) in src/common/config.py
 splink>=5.0        # identity resolution (DuckDB backend); see src/layer1/match.py
 scikit-learn>=1.6     # text TF-IDF + logreg + ridge classifiers (src/layer3/text_classifier.py)
 joblib>=1.3           # trained classifier persistence
+lightgbm>=4.7         # NBA T-learner classifiers (src/layer4/nba.py)
+shap>=0.52            # top-3 feature contributors for explanations (src/layer4/explain.py)
