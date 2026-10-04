@@ -44,6 +44,8 @@ def main(argv=None):
     b.add_argument("--split", default=None); b.add_argument("--questions", default=None)
     b.add_argument("--out", default="submissions/benchmark_answers.csv"); b.add_argument("--limit", type=int)
     b.add_argument("--fresh", action="store_true", help="ignore existing rows in --out")
+    b.add_argument("--pace-seconds", type=float, default=0.0,
+                   help="sleep N seconds between questions (default 0; use 5 for the 19:00 extras run)")
     e = sub.add_parser("eval"); e.add_argument("--answers", default="submissions/benchmark_answers_dev.csv")
     args = p.parse_args(argv)
     cfg = load_config(args.config)
@@ -123,7 +125,8 @@ def main(argv=None):
         print(json.dumps(QA(cfg).answer(args.question, args.as_of), indent=2, default=str))
     elif args.cmd == "bench":
         from src.layer2.benchmark import run
-        print(run(cfg, args.out, args.questions, args.split, args.limit, resume=not args.fresh))
+        print(run(cfg, args.out, args.questions, args.split, args.limit,
+                  resume=not args.fresh, pace_seconds=args.pace_seconds))
     elif args.cmd == "eval":
         from src.layer2.evaluate import evaluate
         print(json.dumps(evaluate(cfg, args.answers, "reports/benchmark_dev_eval.md"), indent=2))

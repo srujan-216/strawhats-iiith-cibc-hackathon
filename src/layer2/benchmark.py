@@ -38,7 +38,7 @@ def load_questions(cfg, questions_csv: str | None = None, split: str | None = No
 
 
 def run(cfg, out: str, questions_csv: str | None = None, split: str | None = None,
-        limit: int | None = None, resume: bool = True, log=print) -> str:
+        limit: int | None = None, resume: bool = True, pace_seconds: float = 0.0, log=print) -> str:
     qs = load_questions(cfg, questions_csv, split)
     if limit:
         qs = qs.head(limit)
@@ -59,6 +59,8 @@ def run(cfg, out: str, questions_csv: str | None = None, split: str | None = Non
         for i, r in enumerate(qs.itertuples(index=False), 1):
             if r.question_id in done:
                 continue
+            if pace_seconds and i > 1:   # keep well under free-tier daily caps on long runs
+                time.sleep(pace_seconds)
             t0 = time.time()
             as_of = getattr(r, "as_of_date", None)
             as_of = None if as_of in (None, "nan", "None", "") else as_of
