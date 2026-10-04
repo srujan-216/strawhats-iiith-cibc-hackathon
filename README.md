@@ -100,28 +100,32 @@ agent accept / edit with a reason code, and the fairness + audit report.
 
 ## What changed from our Phase 1 design
 
-Baseline: `docs/StrawHats_SystemDesign.pdf` (the design we submitted in Phase 1). The build
-revised the following technical/architecture decisions; reasons are in the model card and reports:
+Baseline: `docs/StrawHats_SystemDesign.pdf` (the design we submitted in Phase 1). We revised the
+following technical choices during the build. Each is a trade-off we made deliberately; reasons
+sit alongside the metrics in the reports.
 
-- **Text features — trained classifier instead of LLM at inference.** TF-IDF (word + char n-grams)
-  + logistic regression on the 500 public note labels and 500 transcript labels; macro F1 0.97 on
-  hardship. Predictable cost and latency, offline/online parity, no provider dependency per text
-  record. Full numbers in `reports/text_feature_eval.md`.
-- **LLM gateway — free-provider failover with caching.** OpenAI-compatible gateway to Google
-  Gemini and Groq, with model-level fallback, 503 retry, cool-down waits, and a SQLite response
-  cache. No single-provider dependency; no paid APIs at runtime.
-- **RAG retrieval — BM25 over policy documents.** Fast, model-free, and sufficient on this corpus.
-- **Identity resolution — Splink scoped to CRM dedupe.** Cross-source linkage is deterministic via
-  bridge tables (`account_monthly_snapshot`, `collections_cases.coll_customer_ref`, external →
-  deposits → CIF) at 97–100% coverage on four of five sources; Splink runs within
-  `silver.customers` to catch duplicates the CRM pointer and `national_id_hash` miss. Simpler and
-  auditable.
-- **Feature store — own lightweight offline + online store** (DuckDB-backed) sharing one SQL
-  definition per feature with a 1,000-key parity test. No Feast setup overhead; no feature loss.
-- **NBA target — train on cure, decide on expected value.** The LightGBM T-learners predict cure;
-  the live decision ranks actions by `p_cure(a) × balance_at_risk − action_cost(a)` so
-  `action_cost = 0` for `no_contact` wins automatically on self-cure customers (the data shows a
-  71.5% self-cure baseline, so stopping unnecessary contact IS the business win).
+| Design said | We shipped | Why |
+|---|---|---|
+| Qwen2.5-Coder on local Ollama | Google Gemini + Groq via a free-tier OpenAI-compatible gateway with model-level fallback and SQLite response cache | No reliable local GPU for the demo environment; the gateway gives us production-style failover and no single-provider dependency, and still costs nothing. |
+| `bge-m3` embeddings + FAISS | BM25 over policy documents | Policy corpus is small (<100 docs); BM25 matches it well with no model dependency and no index to rebuild. |
+| LLM text features at inference (Qwen + `faster-whisper`) | TF-IDF (word + char n-grams) + logistic regression trained on the 500 public note labels and 500 transcript labels | Macro F1 0.97 on hardship, 0.96 on ptp_mentioned, 0.89 on vulnerability. Predictable cost and latency; zero inference-time LLM calls per text row. Numbers in `reports/text_feature_eval.md`. |
+| Feast feature store | Own DuckDB-backed offline + online store sharing one SQL definition per feature, with a 1,000-key parity test | No Feast setup overhead; the same train/serve parity guarantee, proved by `tests/test_feature_parity.py`. |
+| FastAPI service in front of the model | Streamlit only (`app/streamlit_app.py`), reading DuckDB directly with `score_case()` under 200 ms | Judges score the demo UI; a separate API layer adds latency and surface area without demo value. |
+| Presidio PII redaction | Supported by the gateway (`llm.redact_pii`) but off by default | Dataset is fully synthetic; the toggle is one line and the code path is live for a real deployment. |
+| Voice features (`faster-whisper` on 2,000 WAVs) | Not shipped | Time budget; text features extracted from the 25,000 transcripts cover the same signal (hardship, sentiment, intent strength), measured on the same label set. |
+
+**Also, two decisions inside the model that are design-doc-consistent but worth calling out:**
+
+- **Identity resolution — Splink scoped to CRM dedupe, cross-source via deterministic bridges.**
+  97–100% coverage on cards / loans / deposits / collections via `account_monthly_snapshot`,
+  `collections_cases.coll_customer_ref`, and `external → deposits → CIF`. Splink inside
+  `silver.customers` catches CRM duplicates the pointer and `national_id_hash` miss (recall 0.99
+  against known truth). Simpler and auditable than running Splink across sources.
+- **NBA target — train on 30-day cure, decide on expected value.** The LightGBM T-learners
+  predict `p_cure`; the live decision ranks actions by
+  `p_cure(a) × balance_at_risk − action_cost(a)` so `action_cost = 0` for `no_contact` wins
+  automatically on self-cure customers. The data has a **71.5% self-cure baseline**, so
+  stopping unnecessary contact IS the business win.
 
 ## AI tools used
 
