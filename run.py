@@ -31,6 +31,7 @@ def main(argv=None):
     ft.add_argument("--dates", nargs="*", default=None, help="decision_dates (default: SNAPSHOT_DATE)")
     sub.add_parser("text-features")   # train 6 classifiers + score all notes/transcripts
     sub.add_parser("feature-report")  # reports/feature_report.md
+    sub.add_parser("randomisation-check")  # P6 pre-flight: test_cell balance
     al = sub.add_parser("all")
     al.add_argument("--sample", type=int, default=None, help="pass to each stage (optional)")
     a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--as-of", default=None)
@@ -78,6 +79,9 @@ def main(argv=None):
     elif args.cmd == "feature-report":
         from src.layer3.feature_report import build_report
         print(build_report(cfg))
+    elif args.cmd == "randomisation-check":
+        from src.layer4.randomisation import write_report
+        print(json.dumps(write_report(cfg), indent=2))
     elif args.cmd == "all":
         import time
         from src.layer1.register import register_all
