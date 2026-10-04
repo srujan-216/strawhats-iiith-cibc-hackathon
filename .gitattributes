@@ -1,0 +1,4 @@
+# Keep the submission CSV as pure LF across all platforms (judges compare byte-exact to the template)
+submission/*.csv text eol=lf
+labels/*.csv text eol=lf
+*.yaml text eol=lf
