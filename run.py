@@ -32,6 +32,9 @@ def main(argv=None):
     sub.add_parser("text-features")   # train 6 classifiers + score all notes/transcripts
     sub.add_parser("feature-report")  # reports/feature_report.md
     sub.add_parser("randomisation-check")  # P6 pre-flight: test_cell balance
+    sub.add_parser("train")                # fit 6 LightGBM NBA classifiers
+    sub.add_parser("score")                # batch-score all open cases -> gold.nba_recommendations
+    sc = sub.add_parser("score-case"); sc.add_argument("case_id")
     al = sub.add_parser("all")
     al.add_argument("--sample", type=int, default=None, help="pass to each stage (optional)")
     a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--as-of", default=None)
@@ -82,6 +85,15 @@ def main(argv=None):
     elif args.cmd == "randomisation-check":
         from src.layer4.randomisation import write_report
         print(json.dumps(write_report(cfg), indent=2))
+    elif args.cmd == "train":
+        from src.layer4.nba import train
+        print(json.dumps(train(cfg), indent=2, default=str))
+    elif args.cmd == "score":
+        from src.layer4.nba import batch_score
+        print(batch_score(cfg))
+    elif args.cmd == "score-case":
+        from src.layer4.nba import score_case
+        print(json.dumps(score_case(cfg, args.case_id), indent=2, default=str))
     elif args.cmd == "all":
         import time
         from src.layer1.register import register_all
