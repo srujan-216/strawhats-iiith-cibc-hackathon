@@ -16,7 +16,7 @@ hidden_dirs: [labels]
 # ---------------------------------------------------------------------------
 llm:
   temperature: 0
-  max_tokens: 1500
+  max_tokens: 3000              # raised from 1500 (fix for truncated JSON on long table answers)
   redact_pii: false            # data is synthetic; turn on to demo the gateway
   cache_path: warehouse/llm_cache.sqlite
   providers:
@@ -35,7 +35,8 @@ llm:
       rpm: 8                   # stay under the free per-minute limit
     - name: groq               # Groq free tier (token caps per day are low on 70B models)
       base_url: https://api.groq.com/openai/v1
-      model: openai/gpt-oss-120b      # llama-3.3-70b retired on Groq; fallback: qwen/qwen3.8-27b (checked 2026-10-03)
+      model: openai/gpt-oss-120b      # primary; see fallback_models for the next tries
+      fallback_models: [llama-3.3-70b-versatile, openai/gpt-oss-20b]   # tried in order on 429 before cooldown
       api_key_env: GROQ_API_KEY
       rpm: 25
   routes:                      # which providers each task uses, in order
