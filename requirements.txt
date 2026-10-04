@@ -20,3 +20,4 @@ scikit-learn>=1.6     # text TF-IDF + logreg + ridge classifiers (src/layer3/tex
 joblib>=1.3           # trained classifier persistence
 lightgbm>=4.7         # NBA T-learner classifiers (src/layer4/nba.py)
 shap>=0.52            # top-3 feature contributors for explanations (src/layer4/explain.py)
+streamlit>=1.38       # Agent Desk app (app/streamlit_app.py)
