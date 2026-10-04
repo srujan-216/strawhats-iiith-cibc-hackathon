@@ -21,5 +21,5 @@ joblib>=1.3           # trained classifier persistence
 lightgbm>=4.7         # NBA T-learner classifiers (src/layer4/nba.py)
 shap>=0.52            # top-3 feature contributors for explanations (src/layer4/explain.py)
 streamlit>=1.38       # Agent Desk app (app/streamlit_app.py)
-playwright>=1.44    # scripts/make_screenshots.py (dev only)
-pymupdf>=1.24       # scripts/pdf_to_png.py (dev only)
+# tests
+pytest>=8.0           # test suite (PYTHONPATH=. pytest -q)
